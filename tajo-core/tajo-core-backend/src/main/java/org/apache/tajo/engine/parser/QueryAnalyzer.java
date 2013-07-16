@@ -47,6 +47,8 @@ import org.apache.tajo.engine.planner.PlanningContextImpl;
 import org.apache.tajo.engine.query.exception.*;
 import org.apache.tajo.exception.InternalException;
 
+import org.apache.tajo.engine.utils.OuterJoinUtil;
+import org.apache.tajo.engine.utils.OuterJoinUtil.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -87,53 +89,12 @@ public final class QueryAnalyzer {
   }
 
   //camelia ---(
-  public Map<String,TableOuterJoined> allTables; 
-  public static class TableOuterJoined{
-     public FromTable theTable;
-     public boolean isNullSupplying;  //if it is a null supplying table in any join
-     public int countLeft;  //number of left outer joins that it participates in
-     public int countRight; //number of right outer joins that it participates in
-     public int countFull;  //number of full outer joins that it participates in
-     public int countInner;  //number of inner joins that it participates in
-     public int countNullSupplying; //number of times it acts as a null supplying table in left or right outer joins
-     public boolean isNullRestricted; //whether from some inner join condition or null-intoleratnt selection (WHERE clause)
-     public int depthRestricted; //the depth under which it is restricted
-  
-     public TableOuterJoined(FromTable ft){
-         this.theTable = ft;
-         this.countLeft = 0;
-         this.countRight = 0;
-         this.countFull = 0;
-         this.countInner = 0;
-         this.isNullSupplying = false;
-         this.countNullSupplying = 0;
-         this.isNullRestricted = false;
-         this.depthRestricted = -1;
-     }
+  private static OuterJoinUtil oju2 = OuterJoinUtil.getOuterJoinUtil();
 
-     public String toString(){
-         String s = "";
-         s += "" + this.theTable.getTableName() + "  " + this.countLeft + " " + this.countRight + " " + this.countFull + " " + this.countInner + " ";
-         s += (this.isNullSupplying)? "yes":"no";
-         s += " " + this.countNullSupplying;
-         s += (this.isNullRestricted)?"yes":"no";
-         s += " " + this.depthRestricted;
-         return s;
-     }
- 
-  }
-
-  private void printAllTables(){
-    for (String key : this.allTables.keySet()){
-       LOG.info("" + this.allTables.get(key).toString() + "\n");
-
-     }
-
-  }
 
   private void recursiveValidateOuterJoin(JoinClause jc, int depth){
 
-    TableOuterJoined rightTable, leftTable;
+    OuterJoinUtil.TableOuterJoined rightTable, leftTable;
     JoinType jt = jc.getJoinType();
     boolean LeftIsLeft = false;  //because the order in the join condition may be however 
     String leftexprname;
@@ -155,41 +116,41 @@ public final class QueryAnalyzer {
 
     if(jt == JoinType.LEFT_OUTER){
        //it is the right operand in a left outer join
-       allTables.get(jc.getRight().getTableName()).countLeft++;
-       allTables.get(jc.getRight().getTableName()).isNullSupplying = true;
-       allTables.get(jc.getRight().getTableName()).countNullSupplying++;
+       oju2.allTables.get(jc.getRight().getTableName()).countLeft++;
+       oju2.allTables.get(jc.getRight().getTableName()).isNullSupplying = true;
+       oju2.allTables.get(jc.getRight().getTableName()).countNullSupplying++;
 
        //based on the join condition, put info for its left operand as well
-       allTables.get(leftexprname).countLeft++;      
+       oju2.allTables.get(leftexprname).countLeft++;      
     }
     else if(jt == JoinType.FULL_OUTER){
        //it is the right operand in a full outer join
-       allTables.get(jc.getRight().getTableName()).countFull++;
-       allTables.get(jc.getRight().getTableName()).isNullSupplying = true;
+       oju2.allTables.get(jc.getRight().getTableName()).countFull++;
+       oju2.allTables.get(jc.getRight().getTableName()).isNullSupplying = true;
        
        //based on the join condition, put info for its left operand as well
-       allTables.get(leftexprname).countFull++;  
-       allTables.get(leftexprname).isNullSupplying = true;     
+       oju2.allTables.get(leftexprname).countFull++;  
+       oju2.allTables.get(leftexprname).isNullSupplying = true;     
     } 
     else if(jt == JoinType.RIGHT_OUTER){
        //it is the right operand in a right outer join
-       allTables.get(jc.getRight().getTableName()).countRight++;
+       oju2.allTables.get(jc.getRight().getTableName()).countRight++;
 
        //based on the join condition, put info for its left operand as well
-       allTables.get(leftexprname).countRight++;  
-       allTables.get(leftexprname).isNullSupplying = true; 
-       allTables.get(leftexprname).countNullSupplying++;
+       oju2.allTables.get(leftexprname).countRight++;  
+       oju2.allTables.get(leftexprname).isNullSupplying = true; 
+       oju2.allTables.get(leftexprname).countNullSupplying++;
     } 
     else if(jt == JoinType.INNER){
        //it is the right operand in an inner join
-       allTables.get(jc.getRight().getTableName()).countInner++;
-       allTables.get(jc.getRight().getTableName()).isNullRestricted = true;
-       allTables.get(jc.getRight().getTableName()).depthRestricted = depth;
+       oju2.allTables.get(jc.getRight().getTableName()).countInner++;
+       oju2.allTables.get(jc.getRight().getTableName()).isNullRestricted = true;
+       oju2.allTables.get(jc.getRight().getTableName()).depthRestricted = depth;
 
        //based on the join condition, put info for its left operand as well
-       allTables.get(leftexprname).countInner++;  
-       allTables.get(leftexprname).isNullRestricted = true;
-       allTables.get(leftexprname).depthRestricted = depth;
+       oju2.allTables.get(leftexprname).countInner++;  
+       oju2.allTables.get(leftexprname).isNullRestricted = true;
+       oju2.allTables.get(leftexprname).depthRestricted = depth;
        //the inner join counting is continued in the rewriteOuterJoin method, when checking the WHERE clause of the query
     } 
 
@@ -207,13 +168,13 @@ public final class QueryAnalyzer {
     boolean hasOuter = false;
 
     if(qb.hasExplicitJoinClause()){ 
-        allTables = new HashMap<String,TableOuterJoined>();
+        
         LOG.info("********* what is in fromtables to populate the hashmap for outer join validation:\n");
         FromTable [] frtables = qb.getFromTables();
         for(i = 0; i<frtables.length; i++){
            LOG.info("******** TABLE:" + frtables[i].getTableName());
-           TableOuterJoined aTable = new TableOuterJoined(frtables[i]);
-           allTables.put(frtables[i].getTableName(),aTable);
+           TableOuterJoined aTable = new OuterJoinUtil.TableOuterJoined(frtables[i]);
+           oju2.allTables.put(frtables[i].getTableName(),aTable);
         }
 
         jc = qb.getJoinClause();
@@ -221,28 +182,28 @@ public final class QueryAnalyzer {
         
         recursiveValidateOuterJoin(jc,0);
         LOG.info("TABLE    COUNTLEFT  COUNTRIGHT  COUNTFULL  COUNTINNER  ISNULLSUPPLYING   COUNTNULLSUPPLYING  ISNULLRESTRICTED DEPTHRESTRICTED\n");
-        printAllTables();
+        oju2.printAllTables();
         
-        for (String key : this.allTables.keySet()){
-           if(this.allTables.get(key).countLeft+this.allTables.get(key).countRight+this.allTables.get(key).countFull>1)
+        for (String key : oju2.allTables.keySet()){
+           if(oju2.allTables.get(key).countLeft + oju2.allTables.get(key).countRight + oju2.allTables.get(key).countFull > 1)
               hasOuter = true;
         }
 
         //PLEASE SEE EXT 3.1. in the Software Design Document, whether to allow or not combined left and right outer joins on the same table
         /*DESIGN CHOICE 1: check if countNullSupplying > 1 then invalidate  (don't allow combined, as in SQL2)
-         for (String key : this.allTables.keySet()){
-             if(this.allTables.get(key).countNullSupplying>1)
-                return this.allTables.get(key).theTable.getTableName();
+         for (String key : oju2.allTables.keySet()){
+             if(oju2.allTables.get(key).countNullSupplying > 1)
+                return oju2.allTables.get(key).theTable.getTableName();
         }*/
         //DESIGN CHOICE 2: accept left and right outer join combined trails, but write a warning  (allow combined, as in SQL3, but warn)
-        for (String key : this.allTables.keySet()){
-             if(this.allTables.get(key).countNullSupplying>1)
-                System.out.println("WARNING: Table " + this.allTables.get(key).theTable.getTableName() + " is null supplying table in more than one outer join ");
+        for (String key : oju2.allTables.keySet()){
+             if(oju2.allTables.get(key).countNullSupplying > 1)
+                System.out.println("WARNING: Table " + oju2.allTables.get(key).theTable.getTableName() + " is null supplying table in more than one outer join ");
          }        
     }
     else{
         FromTable [] frtables = qb.getFromTables();
-        for(i = 0; i<frtables.length; i++)
+        for(i = 0; i < frtables.length; i++)
            LOG.info("******** TABLE:" + frtables[i].getTableName());
     }
     
@@ -255,50 +216,50 @@ public final class QueryAnalyzer {
   private void recursiveWhere(EvalNode wherecond, int depth){
      LOG.info("******** WHERE (DEPTH:" + depth + ") : " + wherecond.getLeftExpr().toString() + " ["+wherecond.getType() + "] " + wherecond.getRightExpr().toString());
      
-     if((wherecond.getLeftExpr().getType() == EvalNode.Type.FIELD)&&(wherecond.getRightExpr().getType()== EvalNode.Type.FIELD)){
+     if((wherecond.getLeftExpr().getType() == EvalNode.Type.FIELD) && (wherecond.getRightExpr().getType()== EvalNode.Type.FIELD)){
          //check if it is a inner join condition
          String lefttablename = ((FieldEval) wherecond.getLeftExpr()).getTableId();
          String righttablename = ((FieldEval) wherecond.getRightExpr()).getTableId();
          if(lefttablename.equals(righttablename) == false){
              //it is an inner join
-             allTables.get(lefttablename).countInner++;  
-             allTables.get(lefttablename).isNullRestricted = true;
-             allTables.get(lefttablename).depthRestricted = 0;
-             allTables.get(righttablename).countInner++;  
-             allTables.get(righttablename).isNullRestricted = true;
-             allTables.get(righttablename).depthRestricted = 0;
+             oju2.allTables.get(lefttablename).countInner++;  
+             oju2.allTables.get(lefttablename).isNullRestricted = true;
+             oju2.allTables.get(lefttablename).depthRestricted = 0;
+             oju2.allTables.get(righttablename).countInner++;  
+             oju2.allTables.get(righttablename).isNullRestricted = true;
+             oju2.allTables.get(righttablename).depthRestricted = 0;
          }
          else {
              //it is a selection involving 2 columns of the same table
-             allTables.get(lefttablename).isNullRestricted = true;
-             allTables.get(lefttablename).depthRestricted = 0;
+             oju2.allTables.get(lefttablename).isNullRestricted = true;
+             oju2.allTables.get(lefttablename).depthRestricted = 0;
          }
      }
      else{
          //check if it a null-intolerant selection 
          //ON THE LEFT
-         if((wherecond.getLeftExpr().getType() == EvalNode.Type.FIELD)&&(wherecond.getType() != EvalNode.Type.IS)){
+         if((wherecond.getLeftExpr().getType() == EvalNode.Type.FIELD) && (wherecond.getType() != EvalNode.Type.IS)){
            String lefttablename= ((FieldEval) wherecond.getLeftExpr()).getTableId();
-           allTables.get(lefttablename).isNullRestricted = true;
-           allTables.get(lefttablename).depthRestricted = 0;
+           oju2.allTables.get(lefttablename).isNullRestricted = true;
+           oju2.allTables.get(lefttablename).depthRestricted = 0;
          }
          else if (wherecond.getLeftExpr().getType() == EvalNode.Type.FUNCTION){
            String lefttablename= ((FieldEval) wherecond.getLeftExpr()).getTableId();
-           allTables.get(lefttablename).isNullRestricted = true;
-           allTables.get(lefttablename).depthRestricted = 0;
+           oju2.allTables.get(lefttablename).isNullRestricted = true;
+           oju2.allTables.get(lefttablename).depthRestricted = 0;
          }
  
          //ON THE RIGHT
          //-- note: the (wherecond.getType()!=EvalNode.Type.IS) test is useless on the right case, it's always true
-         if((wherecond.getRightExpr().getType() == EvalNode.Type.FIELD)&&(wherecond.getType() != EvalNode.Type.IS)){
+         if((wherecond.getRightExpr().getType() == EvalNode.Type.FIELD) && (wherecond.getType() != EvalNode.Type.IS)){
            String righttablename= ((FieldEval) wherecond.getRightExpr()).getTableId();
-           allTables.get(righttablename).isNullRestricted = true;
-           allTables.get(righttablename).depthRestricted = 0;
+           oju2.allTables.get(righttablename).isNullRestricted = true;
+           oju2.allTables.get(righttablename).depthRestricted = 0;
          }
          else if (wherecond.getRightExpr().getType() == EvalNode.Type.FUNCTION){
            String righttablename= ((FieldEval) wherecond.getRightExpr()).getTableId();
-           allTables.get(righttablename).isNullRestricted = true;
-           allTables.get(righttablename).depthRestricted = 0;
+           oju2.allTables.get(righttablename).isNullRestricted = true;
+           oju2.allTables.get(righttablename).depthRestricted = 0;
          }
      }
 
@@ -326,15 +287,15 @@ public final class QueryAnalyzer {
         }
 
         //process the conditions in the WHERE clause to completely determine the null restricted tables
-        QueryBlock qb=(QueryBlock) parseTree;
+        QueryBlock qb = (QueryBlock) parseTree;
         if(qb.hasWhereClause()) {
            EvalNode wherecond = qb.getWhereCondition();
            recursiveWhere(wherecond,0);
         }
         LOG.info("******** AFTER RECURSIVEWHERE:::::::::::::  \n");
         LOG.info("TABLE    COUNTLEFT  COUNTRIGHT  COUNTFULL  COUNTINNER  ISNULLSUPPLYING   COUNTNULLSUPPLYING   IS NULLRESTRICTED DEPTHRESTRICTED\n");
-        printAllTables();
-
+        oju2.printAllTables();
+        
         //camelia )---
         break;
 
