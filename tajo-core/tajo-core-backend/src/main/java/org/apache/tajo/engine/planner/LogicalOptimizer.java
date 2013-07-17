@@ -47,6 +47,8 @@ import org.apache.tajo.util.IndexUtil;
 import java.io.IOException;
 import java.util.*;
 
+import org.apache.tajo.engine.utils.OuterJoinUtil;
+
 /**
  * This class optimizes a logical plan corresponding to one query block.
  */
@@ -56,8 +58,283 @@ public class LogicalOptimizer {
   private LogicalOptimizer() {
   }
 
+  //camelia ---(
+  private static OuterJoinUtil oju2 = OuterJoinUtil.getOuterJoinUtil();
+
+  public static void printStack(Map<String,String> inStackTables){
+     String s="";
+     for (String key : inStackTables.keySet()){
+       s+=" | "+inStackTables.get(key).toString();
+     }
+     LOG.info("********* STACK :"+s+"\n");
+  }
+
+
+  private static void recursiveRewriteMultiNullSupplier(LogicalNode plan, Stack<String> tablesStack, boolean isLastOuterJoin,int depth){
+     //if this is a multi null supplier, then in the joinclause, all other joins but the last it participates in, change to inner join
+     /* e.g. 1)   X left outer join Y on X.x=Y.y right outer join Z on Y.w=Z.z <=>  
+                  X join Y on X.x=Y.y right outer join Z on Y.w=Z.z 
+             2)   A right outer join B on A.a=B.b right outer join C on A.d=C.c <=> 
+                  A join B on A.a=B.b right outer join C on A.d=C.c 
+    */
+    
+    String oneTable = tablesStack.peek(); //don't remove it until reaching all leaves
+    boolean isLastOuterJoin_copy = isLastOuterJoin;
+    switch(plan.getType()) {
+    
+    case JOIN:
+      JoinNode join = (JoinNode) plan;
+
+      LogicalNode outer = join.getOuterNode();
+      LogicalNode inner = join.getInnerNode();
+
+      if (join.hasJoinQual()){
+          String rightexprname = ((FieldEval) join.getJoinQual().getRightExpr()).getTableId();
+          String leftexprname = ((FieldEval) join.getJoinQual().getLeftExpr()).getTableId();
+          String otherTable = null;
+          String b = null;
+          
+          JoinType jt = join.getJoinType();
+          LOG.info("***** IN recursiveRewriteMultiNullSupplier join has type: " + jt.toString() + " inner exprtype:" + inner.getType() + "   and outer exprtype:" + outer.getType()); 
+          //if this join involves oneTable:
+          if((rightexprname.equals(oneTable) == true) || (leftexprname.equals(oneTable) == true)){
+
+             // if it is a left outer join, and oneTable is null supplier 
+             if(jt == JoinType.LEFT_OUTER){
+                if(((ScanNode)inner).getTableId().equals(oneTable) == true){
+                   if(isLastOuterJoin == true){
+                      LOG.info("***** IN recursiveRewriteMultiNullSupplier: WAS LAST NULL SUPPLYING JOIN FOR TABLE "+oneTable);
+                      isLastOuterJoin_copy = false;
+                   }
+                   else {
+                      //convert it to a inner join and add the other table as null restricted
+                      LOG.info("***** IN recursiveRewriteMultiNullSupplier: WAS not LAST NULL SUPPLYING JOIN FOR TABLE " + oneTable + " => CHANGE IT TO INNER JOIN");
+                      isLastOuterJoin_copy = false; //was false anyway
+                      join.setJoinType(JoinType.INNER);
+                      oju2.allTables.get(oneTable).countNullSupplying--;
+
+                      if(leftexprname.equals(oneTable) == true){
+                          oju2.allTables.get(rightexprname).isNullRestricted = true;
+                          oju2.allTables.get(rightexprname).depthRestricted = depth;
+                      }
+                      else{
+                          oju2.allTables.get(leftexprname).isNullRestricted = true;
+                          oju2.allTables.get(leftexprname).depthRestricted = depth;
+                      }
+
+                   } 
+                } 
+                    
+              }//left outer
+
+
+              // if it is a right outer join, and oneTable is null supplier 
+              if(jt == JoinType.RIGHT_OUTER){
+                 if(((ScanNode)inner).getTableId().equals(oneTable) == false){
+                    if(isLastOuterJoin == true){
+                       LOG.info("***** IN recursiveRewriteMultiNullSupplier: WAS LAST NULL SUPPLYING JOIN FOR TABLE "+oneTable);
+                       isLastOuterJoin_copy=false;
+                    }
+                    else {
+                       //convert it to a inner join and add the other table as null restricted
+                       join.setJoinType(JoinType.INNER);
+                       oju2.allTables.get(oneTable).countNullSupplying--;
+                       oju2.allTables.get(((ScanNode)inner).getTableId()).isNullRestricted = true;
+                       oju2.allTables.get(((ScanNode)inner).getTableId()).depthRestricted = depth;
+                    }
+                 }                      
+              }//right outer
+
+          }//this join involves oneTable
+
+      } //hasJoinQual
+
+      recursiveRewriteMultiNullSupplier(outer,tablesStack,isLastOuterJoin_copy,depth+1); //left-deep tree
+      
+      break;
+
+    case SCAN:
+      return;
+
+    default:
+
+      if (plan instanceof UnaryNode) {
+        UnaryNode unary = (UnaryNode) plan;
+        recursiveRewriteMultiNullSupplier(unary.getSubNode(),tablesStack,isLastOuterJoin_copy,depth+1);
+      } else if (plan instanceof BinaryNode) {
+        BinaryNode binary = (BinaryNode) plan;
+        recursiveRewriteMultiNullSupplier(binary.getOuterNode(),tablesStack,isLastOuterJoin_copy,depth+1);
+        recursiveRewriteMultiNullSupplier(binary.getInnerNode(),tablesStack,isLastOuterJoin_copy,depth+1);
+        }
+
+      break;
+    }//switch
+
+  }
+
+
+   private static void recursiveRewriteNullRestricted(LogicalNode plan, Stack<String> tablesStack, Map<String,String> processedTables, Map<String,String> inStackTables, int depth){
+
+    String oneTable = tablesStack.peek(); //don't remove it until reaching all leaves
+
+    switch(plan.getType()) {
+    
+    case JOIN:
+      JoinNode join = (JoinNode) plan;
+
+      LogicalNode outer = join.getOuterNode();
+      LogicalNode inner = join.getInnerNode();
+
+      if (join.hasJoinQual()){
+         JoinType jt = join.getJoinType();
+         LOG.info("***** IN recursiveRewriteMultiNullSupplier join has type: " + jt.toString() + " inner exprtype:" + inner.getType() + "   and outer exprtype:" + outer.getType()); 
+         String rightexprname = ((FieldEval) join.getJoinQual().getRightExpr()).getTableId();
+         String leftexprname = ((FieldEval) join.getJoinQual().getLeftExpr()).getTableId();
+         String otherTable = null;
+         String b=null;
+
+        // traverse logical plan tree  and for each join of type outer join where oneTable is null supplying, change the type of join accordingly. When the join is converted to inner join, the other operand table is pushed into the stack.
+         LOG.info("oneTable=" + oneTable + " depthRestricted=" + oju2.allTables.get(oneTable).depthRestricted + " in join:" + join.getJoinQual() + "actual depth=" + depth);
+         
+         //if this join involves oneTable and it's at a level higher than the level where oneTable begins to be restricted:
+         if(((rightexprname.equals(oneTable) == true)||(leftexprname.equals(oneTable) == true)) && (depth >= oju2.allTables.get(oneTable).depthRestricted)){
+         
+                   if(((ScanNode)inner).getTableId().equals(oneTable) == true){
+                        /*oneTable is on the right side of this join. Cases are:   
+                        1)  SELECT ... FROM   X  type JOIN oneTable ON  X.col1=oneTable.col2   
+                        2)  SELECT ... FROM   X  type JOIN oneTable ON  oneTable.col2=X.col1  */  
+                        // if jointype is  INNER or RIGHT_OUTER => no optimization 
+                        // if jointype is FULL_OUTER => do not transform
+                        if(jt == JoinType.LEFT_OUTER){
+                           //this means that oneTable is a null supplier in this join => change join type to INNER ; decrement the countNullSUpplying in allTables for oneTable; if not already processed push the other operand in the stack
+                           join.setJoinType(JoinType.INNER);
+                           oju2.allTables.get(oneTable).countNullSupplying--;
+
+                          //now get the other operand which becomes null restricted as well
+                          if(rightexprname.equals(oneTable) == true) 
+                             otherTable = leftexprname;
+                          else
+                             otherTable = rightexprname;
+
+                          LOG.info("######### Transforming LEFT_OUTER to INNER join between " + oneTable + " and " + otherTable + "\n");
+                           if((processedTables.get(otherTable) == null) && (inStackTables.get(otherTable) == null)){
+                             b=tablesStack.pop();
+                             tablesStack.push(otherTable);
+                             tablesStack.push(b);
+                             inStackTables.put(otherTable, otherTable);
+                             LOG.info("====> pushed " + otherTable + " on stack \n");
+                          }
+                       
+                      }//left outer                     
+                 }//oneTable is on the right
+                 else {
+                    /*oneTable is on the left side of this join. Cases are:   
+                     1)  SELECT ... FROM   oneTable [... JOIN Y ON COND]  type JOIN X ON  X.col1=oneTable.col2   
+                     2)  SELECT ... FROM   oneTable [... JOIN Y ON COND]  type JOIN X ON  oneTable.col2=X.col1
+                     3)  SELECT ... FROM   Y ... JOIN oneTable ON COND    type JOIN X ON  X.col1=oneTable.col2
+                     4)  SELECT ... FROM   Y ... JOIN oneTable ON COND    type JOIN X ON  oneTable.col2=X.col1*/  
+                    //if jointype is INNER or LEFT_OUTER join => no optimization
+                    if(jt == JoinType.RIGHT_OUTER){
+                       //this means that oneTable is a null supplier in this join =>  change join type to INNER ; decrement the countNullSUpplying in allTables for oneTable; if not already processed push the other operand in the stack
+                       LOG.info("######### Transforming RIGHT_OUTER to INNER join between " + oneTable + " and " + ((ScanNode)inner).getTableId() + "\n");
+                       join.setJoinType(JoinType.INNER);
+                       oju2.allTables.get(oneTable).countNullSupplying--;
+
+                       //the other operand becomes null restricted as well
+                       if((processedTables.get(((ScanNode)inner).getTableId())==null)&&
+                          (inStackTables.get(((ScanNode)inner).getTableId())==null)){
+                          b=tablesStack.pop();
+                          tablesStack.push(((ScanNode)inner).getTableId());
+                          tablesStack.push(b);
+                          inStackTables.put(((ScanNode)inner).getTableId(),((ScanNode)inner).getTableId());
+                          LOG.info("====> pushed "+((ScanNode)inner).getTableId()+" on stack \n");
+                       }
+             
+                    }//right outer  
+                  }//oneTable is on the left side      
+         }//involves oneTable
+      }//hasJoinQual
+
+      recursiveRewriteNullRestricted(outer, tablesStack, processedTables, inStackTables, depth + 1);//left-deep tree  
+      
+      break;
+
+    case SCAN:
+      return;
+
+    default:
+
+      if (plan instanceof UnaryNode) {
+        UnaryNode unary = (UnaryNode) plan;
+        recursiveRewriteNullRestricted(unary.getSubNode(), tablesStack, processedTables, inStackTables, depth+1);
+      } else if (plan instanceof BinaryNode) {
+        BinaryNode binary = (BinaryNode) plan;
+        recursiveRewriteNullRestricted(binary.getOuterNode(), tablesStack, processedTables, inStackTables, depth+1);
+        recursiveRewriteNullRestricted(binary.getInnerNode(), tablesStack, processedTables, inStackTables, depth+1);
+        }
+
+      break;
+    }//switch
+
+  }
+
+  private static void rewriteOuterJoin(PlanningContext ctx, LogicalNode plan) {
+    
+    Stack<String> tablesStack=new Stack<String>();                      //stack for tables to be processed 
+    Map<String,String> inStackTables = new HashMap<String,String>();    //hash map for tables to be processed 
+    Map<String,String> processedTables = new HashMap<String,String>();  //hash map for already processed tables
+    String a;
+   
+    //LOG.info("********** IN REWRITE OUTER JOIN\n");
+    //oju2.printAllTables();
+
+    //firstly, rewriting takes place for situations where there are tables with countNullSupplying > 1; for these tables only the last join where it is null supplying has effect, the other unilateral outer joins where it is null supplying can be converted to inner joins. The rewriting will transform only unilateral outer joins (left/right) to inner joins, where needed. 
+    for (String key : oju2.allTables.keySet()){
+         if(oju2.allTables.get(key).countNullSupplying > 1){
+            LOG.info("******** TABLE SUPPLYING NULLS IN MORE THAN ONE LEFT/RIGHT OUTER JOIN:" + oju2.allTables.get(key).theTable.getTableName() + "\n");
+            tablesStack.push(oju2.allTables.get(key).theTable.getTableName());
+            inStackTables.put(oju2.allTables.get(key).theTable.getTableName(),oju2.allTables.get(key).theTable.getTableName());       
+         }
+     }
+     while(!tablesStack.empty()){
+         //process the joins to retain only the rightmost join in a multi null supplier case
+         printStack(inStackTables);
+         recursiveRewriteMultiNullSupplier(plan,tablesStack, true, 0);
+    
+         //eliminate top of tables stack
+         a = tablesStack.pop();
+         inStackTables.remove(a);  
+     }
+
+     //secondly, all null restricted tables are processes, to change, where appropriate, their outer joins to more restrictive join types
+    for (String key : oju2.allTables.keySet()){
+        if(oju2.allTables.get(key).isNullRestricted == true){           
+            LOG.info("******** TABLE NULLRESTRICTED:" + oju2.allTables.get(key).theTable.getTableName() + "\n");            
+            tablesStack.push(oju2.allTables.get(key).theTable.getTableName());
+            inStackTables.put(oju2.allTables.get(key).theTable.getTableName(),oju2.allTables.get(key).theTable.getTableName());       
+         }
+    }
+    while(!tablesStack.empty()){
+         printStack(inStackTables);
+         //if this table is null supplier in at least one join
+         a = tablesStack.peek();
+         if(oju2.allTables.get(a).countNullSupplying > 0){
+             recursiveRewriteNullRestricted(plan, tablesStack, processedTables, inStackTables, 0);
+         }
+         
+         //eliminate top of stack and mark it as processed
+         a = tablesStack.pop();
+         inStackTables.remove(a);  
+         processedTables.put(a, a);
+        
+         //new elements might have been pushed in the stack inside the recursive method call
+       }
+  }
+  //camelia )---
+
   public static LogicalNode optimize(PlanningContext context, LogicalNode plan) {
     LogicalNode toBeOptimized;
+    boolean hasOuter=false;
 
     try {
       toBeOptimized = (LogicalNode) plan.clone();
@@ -72,6 +349,18 @@ public class LogicalOptimizer {
         //case EXCEPT:
         //case INTERSECT:
       case CREATE_TABLE_AS:
+        //camelia ---(
+        // if there is at least one outer join, go for rewriting
+        for (String key : oju2.allTables.keySet()){
+            if(oju2.allTables.get(key).countLeft + oju2.allTables.get(key).countRight + oju2.allTables.get(key).countFull > 1)
+                hasOuter = true;
+        }
+        if(hasOuter){
+          LOG.info("********** IT HAS OUTER JOIN => PROCEED TO REWRITING\n");
+          rewriteOuterJoin(context, toBeOptimized);
+        }
+        //camelia )---
+
         // if there are selection node
         if(PlannerUtil.findTopNode(plan, ExprType.SELECTION) != null) {
           pushSelection(context, toBeOptimized);
