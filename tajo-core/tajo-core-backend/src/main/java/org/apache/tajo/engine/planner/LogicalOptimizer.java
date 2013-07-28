@@ -498,8 +498,107 @@ public class LogicalOptimizer {
       LogicalNode outer = join.getOuterNode();
       LogicalNode inner = join.getInnerNode();
 
-      pushSelectionRecursive(outer, cnf, stack);
-      pushSelectionRecursive(inner, cnf, stack);
+      //camelia ---(
+      //here we should stop selection pushdown on the null supplying side(s)
+      //get the two operands of the join operation as well as the join type
+      JoinType jt = join.getJoinType(); 
+      if ((join.hasJoinQual()==true)&&((jt==JoinType.LEFT_OUTER)||(jt==JoinType.RIGHT_OUTER)||(jt==JoinType.FULL_OUTER))){
+         String leftexprname = ((FieldEval) join.getJoinQual().getLeftExpr()).getTableId();
+         String rightexprname = ((FieldEval) join.getJoinQual().getRightExpr()).getTableId();
+         List<String> nullSuppliers = Lists.newArrayList();
+         String [] outerlineage = PlannerUtil.getLineage(join.getOuterNode());
+         String [] innerlineage = PlannerUtil.getLineage(join.getInnerNode());
+         Set<String> o = Sets.newHashSet(outerlineage);
+         Set<String> i = Sets.newHashSet(innerlineage);
+
+         //some verification
+         if(jt==JoinType.FULL_OUTER){
+            nullSuppliers.add(leftexprname);
+            nullSuppliers.add(rightexprname);
+            //verify that these null suppliers are indeed in the o and i sets
+            if((i.contains(nullSuppliers.get(0))==false)&&(o.contains(nullSuppliers.get(0))==false))
+               throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
+            if((i.contains(nullSuppliers.get(1))==false)&&(o.contains(nullSuppliers.get(1))==false))
+               throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");          
+
+         }
+         else if (jt==JoinType.LEFT_OUTER){
+            nullSuppliers.add(((ScanNode)inner).getTableId()); 
+            //verify that this null supplier is indeed in the right sub-tree 
+            if (i.contains(nullSuppliers.get(0))==false)
+                throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
+            
+         }
+         else if (jt==JoinType.RIGHT_OUTER){
+            if (((ScanNode)inner).getTableId().equals(rightexprname)==true) {
+                nullSuppliers.add(leftexprname);
+            }
+            else {
+                nullSuppliers.add(rightexprname);                              
+            }
+             //verify that this null supplier is indeed in the left sub-tree
+             if (o.contains(nullSuppliers.get(0))==false)
+                throw new InvalidQueryException("Incorrect Logical Query Plan with regard to outer join");
+         }
+         
+         
+         //retain in this outer join node's JoinQual those selection predicates related to the outer join's null supplier(s)
+          
+          List<EvalNode> matched2 = Lists.newArrayList();
+          for (EvalNode eval : cnf) {
+            
+            Set<Column> columnRefs = EvalTreeUtil.findDistinctRefColumns(eval);
+            Set<String> tableIds = Sets.newHashSet();
+            // getting distinct table references
+            for (Column col : columnRefs) {
+              if (!tableIds.contains(col.getTableName())) {
+                tableIds.add(col.getTableName());
+              }
+            }
+            
+            //if the predicate involves any of the null suppliers
+            boolean shouldKeep=false;
+            Iterator<String> it2 = nullSuppliers.iterator();
+            while(it2.hasNext()){
+              if(tableIds.contains(it2.next()) == true) {
+                   shouldKeep = true; 
+              }
+            }
+
+            if(shouldKeep == true) {
+                matched2.add(eval);
+            }
+            
+          }
+          
+          //merge the retained predicates and establish them in the current outer join node. Then remove them from the cnf
+          EvalNode qual2 = null;
+          if (matched2.size() > 1) {
+             // merged into one eval tree
+             qual2 = EvalTreeUtil.transformCNF2Singleton(
+             matched2.toArray(new EvalNode [matched2.size()]));
+          } else if (matched2.size() == 1) {
+             // if the number of matched expr is one
+             qual2 = matched2.get(0);
+          }
+          if (qual2 != null){
+             EvalNode conjQual2 = EvalTreeUtil.transformCNF2Singleton(join.getJoinQual(), qual2);
+             join.setJoinQual(conjQual2);
+             cnf.removeAll(matched2);
+          }
+          
+          //for the remaining cnf, push it
+          pushSelectionRecursive(outer, cnf, stack);
+          pushSelectionRecursive(inner, cnf, stack);
+ 
+        
+      }   
+      else{
+         //for inner join or non-qualified joins, keep default processing
+         pushSelectionRecursive(outer, cnf, stack);
+         pushSelectionRecursive(inner, cnf, stack);
+      }
+      //camelia )---
 
       List<EvalNode> matched = Lists.newArrayList();
       for (EvalNode eval : cnf) {
