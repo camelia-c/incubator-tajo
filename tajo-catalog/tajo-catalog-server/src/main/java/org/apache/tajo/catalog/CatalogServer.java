@@ -128,13 +128,11 @@ public class CatalogServer extends AbstractService {
     // Creation of a HSA will force a resolve.
     InetSocketAddress initIsa = NetUtils.createSocketAddr(serverAddr);
     try {
-      this.rpcServer = new ProtoBlockingRpcServer(
-          CatalogProtocol.class,
-          handler, initIsa);
+      this.rpcServer = new ProtoBlockingRpcServer(CatalogProtocol.class, handler, initIsa);
       this.rpcServer.start();
 
-      this.bindAddress = this.rpcServer.getBindAddress();
-      this.serverName = org.apache.tajo.util.NetUtils.getIpPortString(bindAddress);
+      this.bindAddress = NetUtils.getConnectAddress(this.rpcServer.getListenAddress());
+      this.serverName = NetUtils.normalizeInetSocketAddress(bindAddress);
       conf.setVar(ConfVars.CATALOG_ADDRESS, serverName);
     } catch (Exception e) {
       LOG.error("Cannot start RPC Server of CatalogServer", e);
@@ -145,7 +143,9 @@ public class CatalogServer extends AbstractService {
   }
 
   public void stop() {
-    this.rpcServer.shutdown();
+    if (rpcServer != null) {
+      this.rpcServer.shutdown();
+    }
     LOG.info("Catalog Server (" + serverName + ") shutdown");
     super.stop();
   }
@@ -238,7 +238,8 @@ public class CatalogServer extends AbstractService {
         store.addTable(new TableDescImpl(descBuilder.build()));
 
       } catch (IOException ioe) {
-        LOG.error(ioe);
+        LOG.error(ioe.getMessage(), ioe);
+        return BOOL_FALSE;
       } finally {
         wlock.unlock();
         LOG.info("Table " + tableDesc.getId() + " is added to the catalog ("
@@ -259,7 +260,8 @@ public class CatalogServer extends AbstractService {
         }
         store.deleteTable(tableId);
       } catch (IOException ioe) {
-        LOG.error(ioe);
+        LOG.error(ioe.getMessage(), ioe);
+        return BOOL_FALSE;
       } finally {
         wlock.unlock();
       }
@@ -441,8 +443,14 @@ public class CatalogServer extends AbstractService {
       for (int i = 0; i < size; i++) {
         paramTypes.add(request.getParameterTypes(i));
       }
-      return functions.get(CatalogUtil.getCanonicalName(
-          request.getSignature().toLowerCase(), paramTypes));
+
+      String key = CatalogUtil.getCanonicalName(
+          request.getSignature().toLowerCase(), paramTypes);
+      if (!functions.containsKey(key)) {
+        return null;
+      } else {
+        return functions.get(key);
+      }
     }
 
     @Override

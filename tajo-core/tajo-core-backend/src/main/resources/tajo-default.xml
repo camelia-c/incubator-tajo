@@ -35,4 +35,12 @@
     <name>tajo.task.localdir</name>
     <value>/tmp/tajo-localdir</value>
   </property>
+
+  <property>
+    <name>tajo.query.session.timeout</name>
+    <value>60000</value>
+    <description>ms</description>
+  </property>
+
+
 </configuration>

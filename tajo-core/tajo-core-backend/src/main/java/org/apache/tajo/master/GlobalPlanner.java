@@ -27,7 +27,7 @@ import org.apache.tajo.SubQueryId;
 import org.apache.tajo.catalog.*;
 import org.apache.tajo.catalog.proto.CatalogProtos.StoreType;
 import org.apache.tajo.conf.TajoConf;
-import org.apache.tajo.engine.parser.QueryBlock.FromTable;
+import org.apache.tajo.engine.planner.FromTable;
 import org.apache.tajo.engine.planner.PlannerUtil;
 import org.apache.tajo.engine.planner.global.MasterPlan;
 import org.apache.tajo.engine.planner.logical.*;
@@ -44,20 +44,14 @@ import java.util.Map;
 public class GlobalPlanner {
   private static Log LOG = LogFactory.getLog(GlobalPlanner.class);
 
-  private TajoConf conf;
   private StorageManager sm;
-  private CatalogService catalog;
   private QueryId queryId;
-  private EventHandler eventHandler;
 
-  public GlobalPlanner(final TajoConf conf, final CatalogService catalog,
+  public GlobalPlanner(final TajoConf conf,
                        final StorageManager sm,
                        final EventHandler eventHandler)
       throws IOException {
-    this.conf = conf;
     this.sm = sm;
-    this.catalog = catalog;
-    this.eventHandler = eventHandler;
   }
 
   /**
@@ -72,36 +66,25 @@ public class GlobalPlanner {
     this.queryId = queryId;
 
     String outputTableName = null;
-    if (rootNode.getSubNode().getType() == ExprType.STORE) {
+    if (rootNode.getChild().getType() == NodeType.STORE) {
       // create table queries are executed by the master
-      StoreTableNode storeTableNode = (StoreTableNode) rootNode.getSubNode();
+      StoreTableNode storeTableNode = (StoreTableNode) rootNode.getChild();
       outputTableName = storeTableNode.getTableName();
     }
 
     // insert store at the subnode of the root
     UnaryNode root = rootNode;
-    IndexWriteNode indexNode = null;
-    // TODO: check whether the type of the subnode is CREATE_INDEX
-    if (root.getSubNode().getType() == ExprType.CREATE_INDEX) {
-      indexNode = (IndexWriteNode) root.getSubNode();
-      root = (UnaryNode)root.getSubNode();
-      
-      StoreIndexNode store = new StoreIndexNode(
-          QueryIdFactory.newSubQueryId(this.queryId).toString());
-      store.setLocal(false);
-      PlannerUtil.insertNode(root, store);
-      
-    } else if (root.getSubNode().getType() != ExprType.STORE) {
+    if (root.getChild().getType() != NodeType.STORE) {
       SubQueryId subQueryId = QueryIdFactory.newSubQueryId(this.queryId);
       outputTableName = subQueryId.toString();
       insertStore(subQueryId.toString(),root).setLocal(false);
     }
     
     // convert 2-phase plan
-    LogicalNode tp = convertTo2Phase(rootNode);
+    LogicalNode twoPhased = convertTo2Phase(rootNode);
 
     // make query graph
-    MasterPlan globalPlan = convertToGlobalPlan(indexNode, tp);
+    MasterPlan globalPlan = convertToGlobalPlan(twoPhased);
     globalPlan.setOutputTableName(outputTableName);
 
     return globalPlan;
@@ -123,40 +106,40 @@ public class GlobalPlanner {
     public void visit(LogicalNode node) {
       String tableId;
       StoreTableNode store;
-      if (node.getType() == ExprType.GROUP_BY) {
+      if (node.getType() == NodeType.GROUP_BY) {
         // transform group by to two-phase plan 
         GroupbyNode groupby = (GroupbyNode) node;
         // insert a store for the child of first group by
-        if (groupby.getSubNode().getType() != ExprType.UNION &&
-            groupby.getSubNode().getType() != ExprType.STORE &&
-            groupby.getSubNode().getType() != ExprType.SCAN) {
+        if (groupby.getChild().getType() != NodeType.UNION &&
+            groupby.getChild().getType() != NodeType.STORE &&
+            groupby.getChild().getType() != NodeType.SCAN) {
           tableId = QueryIdFactory.newSubQueryId(queryId).toString();
           insertStore(tableId, groupby);
         }
         tableId = QueryIdFactory.newSubQueryId(queryId).toString();
         // insert (a store for the first group by) and (a second group by)
         PlannerUtil.transformGroupbyTo2PWithStore((GroupbyNode)node, tableId);
-      } else if (node.getType() == ExprType.SORT) {
+      } else if (node.getType() == NodeType.SORT) {
         // transform sort to two-phase plan 
         SortNode sort = (SortNode) node;
         // insert a store for the child of first sort
-        if (sort.getSubNode().getType() != ExprType.UNION &&
-            sort.getSubNode().getType() != ExprType.STORE &&
-            sort.getSubNode().getType() != ExprType.SCAN) {
+        if (sort.getChild().getType() != NodeType.UNION &&
+            sort.getChild().getType() != NodeType.STORE &&
+            sort.getChild().getType() != NodeType.SCAN) {
           tableId = QueryIdFactory.newSubQueryId(queryId).toString();
           insertStore(tableId, sort);
         }
         tableId = QueryIdFactory.newSubQueryId(queryId).toString();
         // insert (a store for the first sort) and (a second sort)
         PlannerUtil.transformSortTo2PWithStore((SortNode)node, tableId);
-      } else if (node.getType() == ExprType.JOIN) {
+      } else if (node.getType() == NodeType.JOIN) {
         // transform join to two-phase plan 
         // the first phase of two-phase join can be any logical nodes
         JoinNode join = (JoinNode) node;
 
         /*
-        if (join.getOuterNode().getType() == ExprType.SCAN &&
-            join.getInnerNode().getType() == ExprType.SCAN) {
+        if (join.getOuterNode().getType() == NodeType.SCAN &&
+            join.getInnerNode().getType() == NodeType.SCAN) {
           ScanNode outerScan = (ScanNode) join.getOuterNode();
           ScanNode innerScan = (ScanNode) join.getInnerNode();
 
@@ -213,29 +196,29 @@ public class GlobalPlanner {
         } */
 
         // insert stores for the first phase
-        if (join.getOuterNode().getType() != ExprType.UNION &&
-            join.getOuterNode().getType() != ExprType.STORE) {
+        if (join.getLeftChild().getType() != NodeType.UNION &&
+            join.getLeftChild().getType() != NodeType.STORE) {
           tableId = QueryIdFactory.newSubQueryId(queryId).toString();
           store = new StoreTableNode(tableId);
           store.setLocal(true);
           PlannerUtil.insertOuterNode(node, store);
         }
-        if (join.getInnerNode().getType() != ExprType.UNION &&
-            join.getInnerNode().getType() != ExprType.STORE) {
+        if (join.getRightChild().getType() != NodeType.UNION &&
+            join.getRightChild().getType() != NodeType.STORE) {
           tableId = QueryIdFactory.newSubQueryId(queryId).toString();
           store = new StoreTableNode(tableId);
           store.setLocal(true);
           PlannerUtil.insertInnerNode(node, store);
         }
-      } else if (node.getType() == ExprType.UNION) {
+      } else if (node.getType() == NodeType.UNION) {
         // not two-phase transform
         UnionNode union = (UnionNode) node;
         // insert stores
-        if (union.getOuterNode().getType() != ExprType.UNION &&
-            union.getOuterNode().getType() != ExprType.STORE) {
+        if (union.getLeftChild().getType() != NodeType.UNION &&
+            union.getLeftChild().getType() != NodeType.STORE) {
           tableId = QueryIdFactory.newSubQueryId(queryId).toString();
           store = new StoreTableNode(tableId);
-          if(union.getOuterNode().getType() == ExprType.GROUP_BY) {
+          if(union.getLeftChild().getType() == NodeType.GROUP_BY) {
             /*This case is for cube by operator
              * TODO : more complicated conidtion*/
             store.setLocal(true);
@@ -245,11 +228,11 @@ public class GlobalPlanner {
           }
           PlannerUtil.insertOuterNode(node, store);
         }
-        if (union.getInnerNode().getType() != ExprType.UNION &&
-            union.getInnerNode().getType() != ExprType.STORE) {
+        if (union.getRightChild().getType() != NodeType.UNION &&
+            union.getRightChild().getType() != NodeType.STORE) {
           tableId = QueryIdFactory.newSubQueryId(queryId).toString();
           store = new StoreTableNode(tableId);
-          if(union.getInnerNode().getType() == ExprType.GROUP_BY) {
+          if(union.getRightChild().getType() == NodeType.GROUP_BY) {
             /*This case is for cube by operator
              * TODO : more complicated conidtion*/
             store.setLocal(true);
@@ -261,8 +244,8 @@ public class GlobalPlanner {
         }
       } else if (node instanceof UnaryNode) {
         UnaryNode unary = (UnaryNode)node;
-        if (unary.getType() != ExprType.STORE &&
-            unary.getSubNode().getType() != ExprType.STORE) {
+        if (unary.getType() != NodeType.STORE &&
+            unary.getChild().getType() != NodeType.STORE) {
           tableId = QueryIdFactory.newSubQueryId(queryId).toString();
           insertStore(tableId, unary);
         }
@@ -296,9 +279,9 @@ public class GlobalPlanner {
     ExecutionBlock subQuery;
     StoreTableNode store;
     if (node instanceof UnaryNode) {
-      recursiveBuildSubQuery(((UnaryNode) node).getSubNode());
+      recursiveBuildSubQuery(((UnaryNode) node).getChild());
       
-      if (node.getType() == ExprType.STORE) {
+      if (node.getType() == NodeType.STORE) {
         store = (StoreTableNode) node;
         SubQueryId id;
         if (store.getTableName().startsWith(QueryId.PREFIX)) {
@@ -308,7 +291,7 @@ public class GlobalPlanner {
         }
         subQuery = new ExecutionBlock(id);
 
-        switch (store.getSubNode().getType()) {
+        switch (store.getChild().getType()) {
         case BST_INDEX_SCAN:
         case SCAN:  // store - scan
           subQuery = makeScanSubQuery(subQuery);
@@ -344,8 +327,8 @@ public class GlobalPlanner {
         convertMap.put(store, subQuery);
       }
     } else if (node instanceof BinaryNode) {
-      recursiveBuildSubQuery(((BinaryNode) node).getOuterNode());
-      recursiveBuildSubQuery(((BinaryNode) node).getInnerNode());
+      recursiveBuildSubQuery(((BinaryNode) node).getLeftChild());
+      recursiveBuildSubQuery(((BinaryNode) node).getRightChild());
     } else if (node instanceof ScanNode) {
 
     } else {
@@ -372,14 +355,14 @@ public class GlobalPlanner {
     ScanNode newScan;
     ExecutionBlock prev;
     UnaryNode unary = (UnaryNode) plan;
-    UnaryNode child = (UnaryNode) unary.getSubNode();
-    StoreTableNode prevStore = (StoreTableNode)child.getSubNode();
+    UnaryNode child = (UnaryNode) unary.getChild();
+    StoreTableNode prevStore = (StoreTableNode)child.getChild();
 
     // add scan
     newScan = GlobalPlannerUtils.newScanPlan(prevStore.getOutSchema(),
         prevStore.getTableName(), sm.getTablePath(prevStore.getTableName()));
     newScan.setLocal(true);
-    child.setSubNode(newScan);
+    child.setChild(newScan);
     prev = convertMap.get(prevStore);
 
     if (prev != null) {
@@ -409,24 +392,24 @@ public class GlobalPlanner {
     StoreTableNode prevStore;
     ScanNode newScan;
     ExecutionBlock prev;
-    unaryChild = (UnaryNode) unary.getSubNode();  // groupby
-    ExprType curType = unaryChild.getType();
-    if (unaryChild.getSubNode().getType() == ExprType.STORE) {
+    unaryChild = (UnaryNode) unary.getChild();  // groupby
+    NodeType curType = unaryChild.getType();
+    if (unaryChild.getChild().getType() == NodeType.STORE) {
       // store - groupby - store
-      unaryChild = (UnaryNode) unaryChild.getSubNode(); // store
+      unaryChild = (UnaryNode) unaryChild.getChild(); // store
       prevStore = (StoreTableNode) unaryChild;
       newScan = GlobalPlannerUtils.newScanPlan(prevStore.getOutSchema(),
           prevStore.getTableName(),
           sm.getTablePath(prevStore.getTableName()));
       newScan.setLocal(true);
-      ((UnaryNode) unary.getSubNode()).setSubNode(newScan);
+      ((UnaryNode) unary.getChild()).setChild(newScan);
       prev = convertMap.get(prevStore);
       if (prev != null) {
         prev.setParentBlock(unit);
         unit.addChildBlock(newScan, prev);
       }
 
-      if (unaryChild.getSubNode().getType() == curType) {
+      if (unaryChild.getChild().getType() == curType) {
         // the second phase
         unit.setPartitionType(PartitionType.LIST);
         if (prev != null) {
@@ -439,12 +422,12 @@ public class GlobalPlanner {
           prev.setPartitionType(PartitionType.LIST);
         }
       }
-    } else if (unaryChild.getSubNode().getType() == ExprType.SCAN) {
+    } else if (unaryChild.getChild().getType() == NodeType.SCAN) {
       // the first phase
       // store - groupby - scan
       unit.setPartitionType(PartitionType.HASH);
-    } else if (unaryChild.getSubNode().getType() == ExprType.UNION) {
-      _handleUnionNode(rootStore, (UnionNode)unaryChild.getSubNode(), unit, 
+    } else if (unaryChild.getChild().getType() == NodeType.UNION) {
+      _handleUnionNode(rootStore, (UnionNode)unaryChild.getChild(), unit,
           null, PartitionType.LIST);
     } else {
       // error
@@ -466,11 +449,11 @@ public class GlobalPlanner {
     UnaryNode unary = (UnaryNode) plan;
     StoreTableNode outerStore, innerStore;
     ExecutionBlock prev;
-    UnionNode union = (UnionNode) unary.getSubNode();
+    UnionNode union = (UnionNode) unary.getChild();
     unit.setPartitionType(PartitionType.LIST);
     
-    if (union.getOuterNode().getType() == ExprType.STORE) {
-      outerStore = (StoreTableNode) union.getOuterNode();
+    if (union.getLeftChild().getType() == NodeType.STORE) {
+      outerStore = (StoreTableNode) union.getLeftChild();
       TableMeta outerMeta = CatalogUtil.newTableMeta(outerStore.getOutSchema(),
           StoreType.CSV);
       insertOuterScan(union, outerStore.getTableName(), outerMeta);
@@ -479,14 +462,14 @@ public class GlobalPlanner {
         prev.getStoreTableNode().setTableName(rootStore.getTableName());
         prev.setPartitionType(PartitionType.LIST);
         prev.setParentBlock(unit);
-        unit.addChildBlock((ScanNode) union.getOuterNode(), prev);
+        unit.addChildBlock((ScanNode) union.getLeftChild(), prev);
       }
-    } else if (union.getOuterNode().getType() == ExprType.UNION) {
+    } else if (union.getLeftChild().getType() == NodeType.UNION) {
       _handleUnionNode(rootStore, union, unit, null, PartitionType.LIST);
     }
     
-    if (union.getInnerNode().getType() == ExprType.STORE) {
-      innerStore = (StoreTableNode) union.getInnerNode();
+    if (union.getRightChild().getType() == NodeType.STORE) {
+      innerStore = (StoreTableNode) union.getRightChild();
       TableMeta innerMeta = CatalogUtil.newTableMeta(innerStore.getOutSchema(),
           StoreType.CSV);
       insertInnerScan(union, innerStore.getTableName(), innerMeta);
@@ -495,9 +478,9 @@ public class GlobalPlanner {
         prev.getStoreTableNode().setTableName(rootStore.getTableName());
         prev.setPartitionType(PartitionType.LIST);
         prev.setParentBlock(unit);
-        unit.addChildBlock((ScanNode) union.getInnerNode(), prev);
+        unit.addChildBlock((ScanNode) union.getRightChild(), prev);
       }
-    } else if (union.getInnerNode().getType() == ExprType.UNION) {
+    } else if (union.getRightChild().getType() == NodeType.UNION) {
       _handleUnionNode(rootStore, union, unit, null, PartitionType.LIST);
     }
 
@@ -512,40 +495,40 @@ public class GlobalPlanner {
     StoreTableNode prevStore;
     ScanNode newScan;
     ExecutionBlock prev;
-    unaryChild = (UnaryNode) unary.getSubNode();  // groupby
-    ExprType curType = unaryChild.getType();
-    if (unaryChild.getSubNode().getType() == ExprType.STORE) {
+    unaryChild = (UnaryNode) unary.getChild();  // groupby
+    NodeType curType = unaryChild.getType();
+    if (unaryChild.getChild().getType() == NodeType.STORE) {
       // store - groupby - store
-      unaryChild = (UnaryNode) unaryChild.getSubNode(); // store
+      unaryChild = (UnaryNode) unaryChild.getChild(); // store
       prevStore = (StoreTableNode) unaryChild;
       newScan = GlobalPlannerUtils.newScanPlan(prevStore.getOutSchema(),
           prevStore.getTableName(), sm.getTablePath(prevStore.getTableName()));
       newScan.setLocal(true);
-      ((UnaryNode) unary.getSubNode()).setSubNode(newScan);
+      ((UnaryNode) unary.getChild()).setChild(newScan);
       prev = convertMap.get(prevStore);
       if (prev != null) {
         prev.setParentBlock(unit);
         unit.addChildBlock(newScan, prev);
-        if (unaryChild.getSubNode().getType() == curType) {
+        if (unaryChild.getChild().getType() == curType) {
           // TODO - this is duplicated code
           prev.setPartitionType(PartitionType.RANGE);
         } else {
           prev.setPartitionType(PartitionType.LIST);
         }
       }
-      if (unaryChild.getSubNode().getType() == curType) {
+      if (unaryChild.getChild().getType() == curType) {
         // the second phase
         unit.setPartitionType(PartitionType.LIST);
       } else {
         // the first phase
         unit.setPartitionType(PartitionType.HASH);
       }
-    } else if (unaryChild.getSubNode().getType() == ExprType.SCAN) {
+    } else if (unaryChild.getChild().getType() == NodeType.SCAN) {
       // the first phase
       // store - sort - scan
       unit.setPartitionType(PartitionType.RANGE);
-    } else if (unaryChild.getSubNode().getType() == ExprType.UNION) {
-      _handleUnionNode(rootStore, (UnionNode)unaryChild.getSubNode(), unit,
+    } else if (unaryChild.getChild().getType() == NodeType.UNION) {
+      _handleUnionNode(rootStore, (UnionNode)unaryChild.getChild(), unit,
           null, PartitionType.LIST);
     } else {
       // error
@@ -558,9 +541,9 @@ public class GlobalPlanner {
     UnaryNode unary = (UnaryNode)plan;
     StoreTableNode outerStore, innerStore;
     ExecutionBlock prev;
-    JoinNode join = (JoinNode) unary.getSubNode();
-    Schema outerSchema = join.getOuterNode().getOutSchema();
-    Schema innerSchema = join.getInnerNode().getOutSchema();
+    JoinNode join = (JoinNode) unary.getChild();
+    Schema outerSchema = join.getLeftChild().getOutSchema();
+    Schema innerSchema = join.getRightChild().getOutSchema();
     unit.setPartitionType(PartitionType.LIST);
 
     List<Column> outerCollist = new ArrayList<Column>();
@@ -584,8 +567,8 @@ public class GlobalPlanner {
     innerCols = innerCollist.toArray(innerCols);
     
     // outer
-    if (join.getOuterNode().getType() == ExprType.STORE) {
-      outerStore = (StoreTableNode) join.getOuterNode();
+    if (join.getLeftChild().getType() == NodeType.STORE) {
+      outerStore = (StoreTableNode) join.getLeftChild();
       TableMeta outerMeta = CatalogUtil.newTableMeta(outerStore.getOutSchema(),
           StoreType.CSV);
       insertOuterScan(join, outerStore.getTableName(), outerMeta);
@@ -593,19 +576,19 @@ public class GlobalPlanner {
       if (prev != null) {
         prev.setPartitionType(PartitionType.HASH);
         prev.setParentBlock(unit);
-        unit.addChildBlock((ScanNode) join.getOuterNode(), prev);
+        unit.addChildBlock((ScanNode) join.getLeftChild(), prev);
       }
       outerStore.setPartitions(PartitionType.HASH, outerCols, 32);
-    } else if (join.getOuterNode().getType() == ExprType.UNION) {
-      _handleUnionNode(rootStore, (UnionNode)join.getOuterNode(), unit, 
+    } else if (join.getLeftChild().getType() == NodeType.UNION) {
+      _handleUnionNode(rootStore, (UnionNode)join.getLeftChild(), unit,
           outerCols, PartitionType.HASH);
     } else {
 
     }
     
     // inner
-    if (join.getInnerNode().getType() == ExprType.STORE) {
-      innerStore = (StoreTableNode) join.getInnerNode();
+    if (join.getRightChild().getType() == NodeType.STORE) {
+      innerStore = (StoreTableNode) join.getRightChild();
       TableMeta innerMeta = CatalogUtil.newTableMeta(innerStore.getOutSchema(),
           StoreType.CSV);
       insertInnerScan(join, innerStore.getTableName(), innerMeta);
@@ -613,11 +596,11 @@ public class GlobalPlanner {
       if (prev != null) {
         prev.setPartitionType(PartitionType.HASH);
         prev.setParentBlock(unit);
-        unit.addChildBlock((ScanNode) join.getInnerNode(), prev);
+        unit.addChildBlock((ScanNode) join.getRightChild(), prev);
       }
       innerStore.setPartitions(PartitionType.HASH, innerCols, 32);
-    } else if (join.getInnerNode().getType() == ExprType.UNION) {
-      _handleUnionNode(rootStore, (UnionNode)join.getInnerNode(), unit,
+    } else if (join.getRightChild().getType() == NodeType.UNION) {
+      _handleUnionNode(rootStore, (UnionNode)join.getRightChild(), unit,
           innerCols, PartitionType.HASH);
     }
     
@@ -641,8 +624,8 @@ public class GlobalPlanner {
     TableMeta meta;
     ExecutionBlock prev;
     
-    if (union.getOuterNode().getType() == ExprType.STORE) {
-      store = (StoreTableNode) union.getOuterNode();
+    if (union.getLeftChild().getType() == NodeType.STORE) {
+      store = (StoreTableNode) union.getLeftChild();
       meta = CatalogUtil.newTableMeta(store.getOutSchema(), StoreType.CSV);
       insertOuterScan(union, store.getTableName(), meta);
       prev = convertMap.get(store);
@@ -650,18 +633,18 @@ public class GlobalPlanner {
         prev.getStoreTableNode().setTableName(rootStore.getTableName());
         prev.setPartitionType(prevOutputType);
         prev.setParentBlock(cur);
-        cur.addChildBlock((ScanNode) union.getOuterNode(), prev);
+        cur.addChildBlock((ScanNode) union.getLeftChild(), prev);
       }
       if (cols != null) {
         store.setPartitions(PartitionType.LIST, cols, 32);
       }
-    } else if (union.getOuterNode().getType() == ExprType.UNION) {
-      _handleUnionNode(rootStore, (UnionNode)union.getOuterNode(), cur, cols, 
+    } else if (union.getLeftChild().getType() == NodeType.UNION) {
+      _handleUnionNode(rootStore, (UnionNode)union.getLeftChild(), cur, cols,
           prevOutputType);
     }
     
-    if (union.getInnerNode().getType() == ExprType.STORE) {
-      store = (StoreTableNode) union.getInnerNode();
+    if (union.getRightChild().getType() == NodeType.STORE) {
+      store = (StoreTableNode) union.getRightChild();
       meta = CatalogUtil.newTableMeta(store.getOutSchema(), StoreType.CSV);
       insertInnerScan(union, store.getTableName(), meta);
       prev = convertMap.get(store);
@@ -669,13 +652,13 @@ public class GlobalPlanner {
         prev.getStoreTableNode().setTableName(rootStore.getTableName());
         prev.setPartitionType(prevOutputType);
         prev.setParentBlock(cur);
-        cur.addChildBlock((ScanNode) union.getInnerNode(), prev);
+        cur.addChildBlock((ScanNode) union.getRightChild(), prev);
       }
       if (cols != null) {
         store.setPartitions(PartitionType.LIST, cols, 32);
       }
-    } else if (union.getInnerNode().getType() == ExprType.UNION) {
-      _handleUnionNode(rootStore, (UnionNode)union.getInnerNode(), cur, cols, 
+    } else if (union.getRightChild().getType() == NodeType.UNION) {
+      _handleUnionNode(rootStore, (UnionNode)union.getRightChild(), cur, cols,
           prevOutputType);
     }
   }
@@ -687,7 +670,7 @@ public class GlobalPlanner {
     scan.setLocal(true);
     scan.setInSchema(meta.getSchema());
     scan.setOutSchema(meta.getSchema());
-    parent.setOuter(scan);
+    parent.setLeftChild(scan);
     return parent;
   }
   
@@ -698,24 +681,17 @@ public class GlobalPlanner {
     scan.setLocal(true);
     scan.setInSchema(meta.getSchema());
     scan.setOutSchema(meta.getSchema());
-    parent.setInner(scan);
+    parent.setRightChild(scan);
     return parent;
   }
   
-  private MasterPlan convertToGlobalPlan(IndexWriteNode index,
-                                         LogicalNode logicalPlan) throws IOException {
+  private MasterPlan convertToGlobalPlan(LogicalNode logicalPlan) throws IOException {
     recursiveBuildSubQuery(logicalPlan);
     ExecutionBlock root;
-    
-    if (index != null) {
-      SubQueryId id = QueryIdFactory.newSubQueryId(queryId);
-      ExecutionBlock unit = new ExecutionBlock(id);
-      root = makeScanSubQuery(unit);
-      root.setPlan(index);
-    } else {
-      root = convertMap.get(((LogicalRootNode)logicalPlan).getSubNode());
-      root.getStoreTableNode().setLocal(false);
-    }
+
+    root = convertMap.get(((LogicalRootNode)logicalPlan).getChild());
+    root.getStoreTableNode().setLocal(false);
+
     return new MasterPlan(root);
   }
 }

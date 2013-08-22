@@ -27,6 +27,8 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.tajo.catalog.*;
@@ -38,7 +40,6 @@ import org.apache.tajo.master.TajoMaster;
 import org.apache.tajo.util.NetUtils;
 
 import java.io.*;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.sql.ResultSet;
@@ -154,7 +155,8 @@ public class TajoTestingCluster {
     System.setProperty(MiniDFSCluster.PROP_TEST_BUILD_DATA,
         this.clusterTestBuildDir.toString());
 
-    MiniDFSCluster.Builder builder = new MiniDFSCluster.Builder(conf);
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 1);
+    MiniDFSCluster.Builder builder = new MiniDFSCluster.Builder(new HdfsConfiguration(conf));
     builder.hosts(hosts);
     builder.numDataNodes(servers);
     builder.format(true);
@@ -208,7 +210,7 @@ public class TajoTestingCluster {
     catalogServer = new MiniCatalogServer(conf);
     CatalogServer catServer = catalogServer.getCatalogServer();
     InetSocketAddress sockAddr = catServer.getBindAddress();
-    c.setVar(ConfVars.CATALOG_ADDRESS, NetUtils.getIpPortString(sockAddr));
+    c.setVar(ConfVars.CATALOG_ADDRESS, NetUtils.normalizeInetSocketAddress(sockAddr));
 
     return this.catalogServer;
   }
@@ -230,6 +232,8 @@ public class TajoTestingCluster {
     TajoConf c = getConfiguration();
     c.setVar(ConfVars.TASKRUNNER_LISTENER_ADDRESS, "localhost:0");
     c.setVar(ConfVars.CLIENT_SERVICE_ADDRESS, "localhost:0");
+    c.setVar(ConfVars.QUERY_MASTER_MANAGER_SERVICE_ADDRESS, "localhost:0");
+
     c.setVar(ConfVars.CATALOG_ADDRESS, "localhost:0");
     c.set(CatalogConstants.STORE_CLASS, "org.apache.tajo.catalog.store.MemStore");
     c.set(CatalogConstants.JDBC_URI, "jdbc:derby:target/test-data/tcat/db");
@@ -293,8 +297,7 @@ public class TajoTestingCluster {
    */
   public void startMiniCluster(final int numSlaves)
       throws Exception {
-    String localHostName = InetAddress.getLocalHost().getHostName();
-    startMiniCluster(numSlaves, new String[] {localHostName});
+    startMiniCluster(numSlaves, null);
   }
 
   public void startMiniCluster(final int numSlaves,
@@ -333,6 +336,12 @@ public class TajoTestingCluster {
     conf.set("yarn.scheduler.capacity.root.queues", "default");
     conf.set("yarn.scheduler.capacity.root.default.capacity", "100");
 
+    // fixed thread OOM
+    conf.setInt(YarnConfiguration.RM_CLIENT_THREAD_COUNT, 2);
+    conf.setInt(YarnConfiguration.RM_SCHEDULER_CLIENT_THREAD_COUNT, 2);
+    conf.setInt(YarnConfiguration.RM_RESOURCE_TRACKER_CLIENT_THREAD_COUNT, 2);
+    conf.setInt(YarnConfiguration.NM_CONTAINER_MGR_THREAD_COUNT, 2);
+
     conf.setInt(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB, 384);
     conf.setInt(YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_MB, 3000);
     conf.setInt(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES, 1);
@@ -344,10 +353,10 @@ public class TajoTestingCluster {
       yarnCluster.start();
 
       conf.set(YarnConfiguration.RM_ADDRESS,
-          NetUtils.getIpPortString(yarnCluster.getResourceManager().
+          NetUtils.normalizeInetSocketAddress(yarnCluster.getResourceManager().
               getClientRMService().getBindAddress()));
       conf.set(YarnConfiguration.RM_SCHEDULER_ADDRESS,
-          NetUtils.getIpPortString(yarnCluster.getResourceManager().
+          NetUtils.normalizeInetSocketAddress(yarnCluster.getResourceManager().
               getApplicationMasterService().getBindAddress()));
 
       URL url = Thread.currentThread().getContextClassLoader().getResource("yarn-site.xml");
@@ -386,11 +395,17 @@ public class TajoTestingCluster {
   }
 
   public void shutdownMiniCluster() throws IOException {
-    LOG.info("Shutting down minicluster");
+    LOG.info("========================================");
+    LOG.info("Shutdown minicluster");
+    LOG.info("========================================");
     shutdownMiniTajoCluster();
 
     if(this.catalogServer != null) {
       shutdownCatalogCluster();
+    }
+
+    if(this.yarnCluster != null) {
+      this.yarnCluster.stop();
     }
 
     if(this.dfsCluster != null) {
@@ -428,38 +443,6 @@ public class TajoTestingCluster {
       TableMeta meta = CatalogUtil
           .newTableMeta(schemas[i], CatalogProtos.StoreType.CSV, option);
       client.createTable(tableNames[i], new Path(tableDir.getAbsolutePath()), meta);
-    }
-    Thread.sleep(1000);
-    ResultSet res = client.executeQueryAndGetResult(query);
-    util.shutdownMiniCluster();
-    return res;
-  }
-
-  public static ResultSet run(String[] names,
-                              String[] tablepaths,
-                              Schema[] schemas,
-                              Options option,
-                              String query) throws Exception {
-    TajoTestingCluster util = new TajoTestingCluster();
-    util.startMiniCluster(1);
-    TajoConf conf = util.getConfiguration();
-    TajoClient client = new TajoClient(conf);
-
-    FileSystem fs = util.getDefaultFileSystem();
-    Path rootDir = util.getMaster().
-        getStorageManager().getBaseDir();
-    fs.mkdirs(rootDir);
-    for (int i = 0; i < tablepaths.length; i++) {
-      Path localPath = new Path(tablepaths[i]);
-      Path tablePath = new Path(rootDir, names[i]);
-      fs.mkdirs(tablePath);
-      Path dataPath = new Path(tablePath, "data");
-      fs.mkdirs(dataPath);
-      Path dfsPath = new Path(dataPath, localPath.getName());
-      fs.copyFromLocalFile(localPath, dfsPath);
-      TableMeta meta = CatalogUtil.newTableMeta(schemas[i],
-          CatalogProtos.StoreType.CSV, option);
-      client.createTable(names[i], tablePath, meta);
     }
     Thread.sleep(1000);
     ResultSet res = client.executeQueryAndGetResult(query);
@@ -548,23 +531,5 @@ public class TajoTestingCluster {
     TajoTestingCluster cluster2 = new TajoTestingCluster();
     File f2 = cluster2.setupClusterTestBuildDir();
     System.out.println("first setupClusterTestBuildDir of cluster2: " + f2);
-    /*
-    String [] names = {"table1"};
-    String [][] tables = new String[1][];
-    tables[0] = new String[] {"a,b,c", "b,c,d"};
-
-    Schema [] schemas = new Schema[1];
-    schemas[0] = new Schema()
-          .addColumn("f1", CatalogProtos.DataType.STRING)
-          .addColumn("f2", CatalogProtos.DataType.STRING)
-          .addColumn("f3", CatalogProtos.DataType.STRING);
-
-    ResultSet res = runInLocal(names, schemas, tables, "select f1 from table1");
-    res.next();
-    System.out.println(res.getString(0));
-    res.next();
-    System.out.println(res.getString(0));
-    System.exit(0);
-    */
 	}
 }

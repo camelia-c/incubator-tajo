@@ -25,6 +25,6 @@ public class NoSuchTableException extends CatalogException {
 	public NoSuchTableException() {}
 
 	public NoSuchTableException(String relName) {
-		super("No Such Relation in Catalog: "+relName);
+		super("ERROR: relation \"" + relName + "\" does not exist");
 	}
 }
