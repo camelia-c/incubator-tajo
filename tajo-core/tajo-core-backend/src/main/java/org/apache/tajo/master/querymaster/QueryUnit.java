@@ -30,11 +30,12 @@ import org.apache.tajo.QueryUnitAttemptId;
 import org.apache.tajo.QueryUnitId;
 import org.apache.tajo.catalog.Schema;
 import org.apache.tajo.catalog.statistics.TableStat;
-import org.apache.tajo.ipc.QueryMasterProtocol.Partition;
 import org.apache.tajo.engine.planner.logical.*;
+import org.apache.tajo.ipc.TajoWorkerProtocol.Partition;
 import org.apache.tajo.master.TaskState;
 import org.apache.tajo.master.event.*;
 import org.apache.tajo.storage.Fragment;
+import org.apache.tajo.util.TajoIdUtils;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -59,7 +60,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 	
   private List<Partition> partitions;
 	private TableStat stats;
-  private String [] dataLocations;
+  private List<DataLocation> dataLocations;
   private final boolean isLeafTask;
   private List<IntermediateEntry> intermediateData;
 
@@ -127,11 +128,18 @@ public class QueryUnit implements EventHandler<TaskEvent> {
     return this.isLeafTask;
   }
 
-  public void setDataLocations(String [] dataLocations) {
-    this.dataLocations = dataLocations;
+  public void setDataLocations(Fragment fragment) {
+    String[] hosts = fragment.getHosts();
+    int[] blockCount = fragment.getHostsBlockCount();
+    int[] volumeIds = fragment.getDiskIds();
+    this.dataLocations = new ArrayList<DataLocation>(hosts.length);
+
+    for (int i = 0; i < hosts.length; i++) {
+      this.dataLocations.add(new DataLocation(hosts[i], blockCount[i], volumeIds[i]));
+    }
   }
 
-  public String [] getDataLocations() {
+  public List<DataLocation> getDataLocations() {
     return this.dataLocations;
   }
 
@@ -171,16 +179,12 @@ public class QueryUnit implements EventHandler<TaskEvent> {
   @Deprecated
   public void setFragment(String tableId, Fragment fragment) {
     this.fragMap.put(tableId, fragment);
-    if (fragment.hasDataLocations()) {
-      setDataLocations(fragment.getDataLocations());
-    }
+    setDataLocations(fragment);
   }
 
   public void setFragment2(Fragment fragment) {
     this.fragMap.put(fragment.getName(), fragment);
-    if (fragment.hasDataLocations()) {
-      setDataLocations(fragment.getDataLocations());
-    }
+    setDataLocations(fragment);
   }
 	
 	public void addFetch(String tableId, String uri) throws URISyntaxException {
@@ -296,9 +300,8 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 	}
 
   public QueryUnitAttempt newAttempt() {
-    QueryUnitAttempt attempt = new QueryUnitAttempt(
-        QueryIdFactory.newQueryUnitAttemptId(this.getId(),
-            ++lastAttemptId), this, eventHandler);
+    QueryUnitAttempt attempt = new QueryUnitAttempt(QueryIdFactory.newQueryUnitAttemptId(
+        this.getId(), ++lastAttemptId), this, eventHandler);
     return attempt;
   }
 
@@ -307,7 +310,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
   }
 
   public QueryUnitAttempt getAttempt(int attempt) {
-    return this.attempts.get(new QueryUnitAttemptId(this.getId(), attempt));
+    return this.attempts.get(QueryIdFactory.newQueryUnitAttemptId(this.getId(), attempt));
   }
 
   public QueryUnitAttempt getLastAttempt() {
@@ -430,7 +433,7 @@ public class QueryUnit implements EventHandler<TaskEvent> {
         stateMachine.doTransition(event.getType(), event);
       } catch (InvalidStateTransitonException e) {
         LOG.error("Can't handle this event at current state", e);
-        eventHandler.handle(new QueryEvent(getId().getQueryId(),
+        eventHandler.handle(new QueryEvent(TajoIdUtils.parseQueryId(getId().toString()),
             QueryEventType.INTERNAL_ERROR));
       }
 
@@ -494,6 +497,39 @@ public class QueryUnit implements EventHandler<TaskEvent> {
 
     public String getPullAddress() {
       return pullHost + ":" + port;
+    }
+  }
+
+  public static class DataLocation {
+    private String host;
+    private int blockCount; // for Non-Splittable
+    private int volumeId;
+
+    public DataLocation(String host, int blockCount, int volumeId) {
+      this.host = host;
+      this.blockCount = blockCount;
+      this.volumeId = volumeId;
+    }
+
+    public String getHost() {
+      return host;
+    }
+
+    public int getBlockCount() {
+      return blockCount;
+    }
+
+    public int getVolumeId() {
+      return volumeId;
+    }
+
+    @Override
+    public String toString() {
+      return "DataLocation{" +
+          "host=" + host +
+          ", blocks=" + blockCount +
+          ", volumeId=" + volumeId +
+          '}';
     }
   }
 }

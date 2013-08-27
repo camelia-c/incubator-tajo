@@ -15,6 +15,10 @@ Release 0.2.0 - unreleased
 
   IMPROVEMENTS
 
+    TAJO-127: Implement Tajo Resource Manager. (hyoungjunkim via hyunsik)
+
+    TAJO-84: Task scheduling with considering disk load balance. (jinho)
+
     TAJO-123: Clean up the logical plan's json format. (hyunsik)
 
     TAJO-129: Enable the constructor of NettyServerBase to take a service

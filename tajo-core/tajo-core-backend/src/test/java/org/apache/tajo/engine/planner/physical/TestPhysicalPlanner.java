@@ -25,7 +25,6 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.QueryUnitAttemptId;
 import org.apache.tajo.TajoTestingCluster;
 import org.apache.tajo.TaskAttemptContext;
@@ -78,7 +77,6 @@ public class TestPhysicalPlanner {
 
   @BeforeClass
   public static void setUp() throws Exception {
-    QueryIdFactory.reset();
     util = new TajoTestingCluster();
 
     util.startCatalogCluster();
@@ -469,7 +467,7 @@ public class TestPhysicalPlanner {
     Fragment [] fragments = new Fragment[list.length];
     int i = 0;
     for (FileStatus status : list) {
-      fragments[i++] = new Fragment("partition", status.getPath(), outputMeta, 0, status.getLen(), null);
+      fragments[i++] = new Fragment("partition", status.getPath(), outputMeta, 0, status.getLen());
     }
     Scanner scanner = new MergeScanner(conf, outputMeta,TUtil.newList(fragments));
     scanner.init();
@@ -527,7 +525,7 @@ public class TestPhysicalPlanner {
     Fragment [] fragments = new Fragment[list.length];
     int i = 0;
     for (FileStatus status : list) {
-      fragments[i++] = new Fragment("partition", status.getPath(), outputMeta, 0, status.getLen(), null);
+      fragments[i++] = new Fragment("partition", status.getPath(), outputMeta, 0, status.getLen());
     }
     Scanner scanner = new MergeScanner(conf, outputMeta,TUtil.newList(fragments));
     scanner.init();

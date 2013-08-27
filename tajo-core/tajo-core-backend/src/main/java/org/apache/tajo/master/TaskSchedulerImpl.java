@@ -22,28 +22,26 @@ import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.net.NetUtils;
-import org.apache.hadoop.yarn.event.AsyncDispatcher;
+import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.service.AbstractService;
 import org.apache.hadoop.yarn.util.RackResolver;
+import org.apache.tajo.ExecutionBlockId;
 import org.apache.tajo.QueryIdFactory;
 import org.apache.tajo.QueryUnitAttemptId;
-import org.apache.tajo.SubQueryId;
 import org.apache.tajo.engine.planner.logical.ScanNode;
 import org.apache.tajo.engine.query.QueryUnitRequestImpl;
-import org.apache.tajo.ipc.QueryMasterProtocol;
+import org.apache.tajo.ipc.TajoWorkerProtocol;
 import org.apache.tajo.ipc.protocolrecords.QueryUnitRequest;
-import org.apache.tajo.master.querymaster.QueryMaster.QueryContext;
 import org.apache.tajo.master.event.TaskAttemptAssignedEvent;
 import org.apache.tajo.master.event.TaskRequestEvent;
-import org.apache.tajo.master.event.TaskRequestEvent.TaskRequestEventType;
 import org.apache.tajo.master.event.TaskScheduleEvent;
 import org.apache.tajo.master.event.TaskSchedulerEvent;
 import org.apache.tajo.master.event.TaskSchedulerEvent.EventType;
+import org.apache.tajo.master.querymaster.QueryMasterTask;
 import org.apache.tajo.master.querymaster.QueryUnit;
 import org.apache.tajo.storage.Fragment;
-import org.apache.tajo.util.TajoIdUtils;
+import org.apache.tajo.util.NetUtils;
 
 import java.net.URI;
 import java.util.*;
@@ -54,8 +52,8 @@ public class TaskSchedulerImpl extends AbstractService
     implements TaskScheduler {
   private static final Log LOG = LogFactory.getLog(TaskScheduleEvent.class);
 
-  private final QueryContext context;
-  private AsyncDispatcher dispatcher;
+  private final QueryMasterTask.QueryContext context;
+  private TajoAsyncDispatcher dispatcher;
 
   private Thread eventHandlingThread;
   private Thread schedulingThread;
@@ -71,21 +69,22 @@ public class TaskSchedulerImpl extends AbstractService
   private int rackLocalAssigned = 0;
   private int totalAssigned = 0;
 
-  public TaskSchedulerImpl(QueryContext context) {
+  public TaskSchedulerImpl(QueryMasterTask.QueryContext context) {
     super(TaskSchedulerImpl.class.getName());
     this.context = context;
     this.dispatcher = context.getDispatcher();
   }
 
+  @Override
   public void init(Configuration conf) {
 
     scheduledRequests = new ScheduledRequests();
     taskRequests  = new TaskRequests();
-    dispatcher.register(TaskRequestEventType.class, taskRequests);
 
     super.init(conf);
   }
 
+  @Override
   public void start() {
     LOG.info("Start TaskScheduler");
     this.eventHandlingThread = new Thread() {
@@ -112,13 +111,14 @@ public class TaskSchedulerImpl extends AbstractService
 
         while(!stopEventHandling && !Thread.currentThread().isInterrupted()) {
           try {
-            Thread.sleep(100);
+            Thread.sleep(1000);
           } catch (InterruptedException e) {
             break;
           }
 
           schedule();
         }
+        //req.getCallback().run(stopTaskRunnerReq);
         LOG.info("TaskScheduler schedulingThread stopped");
       }
     };
@@ -127,15 +127,15 @@ public class TaskSchedulerImpl extends AbstractService
     super.start();
   }
 
-  private static final QueryUnitAttemptId NULL_ID;
-  private static final QueryMasterProtocol.QueryUnitRequestProto stopTaskRunnerReq;
+  private static final QueryUnitAttemptId NULL_ATTEMPT_ID;
+  public static final TajoWorkerProtocol.QueryUnitRequestProto stopTaskRunnerReq;
   static {
-    SubQueryId nullSubQuery =
-        QueryIdFactory.newSubQueryId(TajoIdUtils.NullQueryId);
-    NULL_ID = QueryIdFactory.newQueryUnitAttemptId(QueryIdFactory.newQueryUnitId(nullSubQuery, 0), 0);
+    ExecutionBlockId nullSubQuery = QueryIdFactory.newExecutionBlockId(QueryIdFactory.NULL_QUERY_ID, 0);
+    NULL_ATTEMPT_ID = QueryIdFactory.newQueryUnitAttemptId(QueryIdFactory.newQueryUnitId(nullSubQuery, 0), 0);
 
-    QueryMasterProtocol.QueryUnitRequestProto.Builder builder = QueryMasterProtocol.QueryUnitRequestProto.newBuilder();
-    builder.setId(NULL_ID.getProto());
+    TajoWorkerProtocol.QueryUnitRequestProto.Builder builder =
+        TajoWorkerProtocol.QueryUnitRequestProto.newBuilder();
+    builder.setId(NULL_ATTEMPT_ID.getProto());
     builder.setShouldDie(true);
     builder.setOutputTable("");
     builder.setSerializedData("");
@@ -143,7 +143,7 @@ public class TaskSchedulerImpl extends AbstractService
     stopTaskRunnerReq = builder.build();
   }
 
-
+  @Override
   public void stop() {
     stopEventHandling = true;
     eventHandlingThread.interrupt();
@@ -204,12 +204,12 @@ public class TaskSchedulerImpl extends AbstractService
   public void handle(TaskSchedulerEvent event) {
     int qSize = eventQueue.size();
     if (qSize != 0 && qSize % 1000 == 0) {
-      LOG.info("Size of event-queue in RMContainerAllocator is " + qSize);
+      LOG.info("Size of event-queue in YarnRMContainerAllocator is " + qSize);
     }
     int remCapacity = eventQueue.remainingCapacity();
     if (remCapacity < 1000) {
       LOG.warn("Very low remaining capacity in the event-queue "
-          + "of RMContainerAllocator: " + remCapacity);
+          + "of YarnRMContainerAllocator: " + remCapacity);
     }
 
     try {
@@ -219,20 +219,29 @@ public class TaskSchedulerImpl extends AbstractService
     }
   }
 
+  public void handleTaskRequestEvent(TaskRequestEvent event) {
+    taskRequests.handle(event);
+  }
+
   private class TaskRequests implements EventHandler<TaskRequestEvent> {
     private final LinkedBlockingQueue<TaskRequestEvent> taskRequestQueue =
         new LinkedBlockingQueue<TaskRequestEvent>();
 
     @Override
     public void handle(TaskRequestEvent event) {
+      LOG.info("====>TaskRequest:" + event.getContainerId() + "," + event.getExecutionBlockId());
+      if(stopEventHandling) {
+        event.getCallback().run(stopTaskRunnerReq);
+        return;
+      }
       int qSize = taskRequestQueue.size();
       if (qSize != 0 && qSize % 1000 == 0) {
-        LOG.info("Size of event-queue in RMContainerAllocator is " + qSize);
+        LOG.info("Size of event-queue in YarnRMContainerAllocator is " + qSize);
       }
       int remCapacity = taskRequestQueue.remainingCapacity();
       if (remCapacity < 1000) {
         LOG.warn("Very low remaining capacity in the event-queue "
-            + "of RMContainerAllocator: " + remCapacity);
+            + "of YarnRMContainerAllocator: " + remCapacity);
       }
 
       taskRequestQueue.add(event);
@@ -248,28 +257,111 @@ public class TaskSchedulerImpl extends AbstractService
     }
   }
 
+  public static class TaskBlockLocation {
+    private HashMap<Integer, LinkedList<QueryUnitAttemptId>> unAssignedTaskMap =
+        new HashMap<Integer, LinkedList<QueryUnitAttemptId>>();
+    private HashMap<ContainerId, Integer> assignedContainerMap = new HashMap<ContainerId, Integer>();
+    private TreeMap<Integer, Integer> volumeUsageMap = new TreeMap<Integer, Integer>();
+    private String host;
+
+    public TaskBlockLocation(String host){
+      this.host = host;
+    }
+
+    public void addQueryUnitAttemptId(Integer volumeId, QueryUnitAttemptId attemptId){
+      LinkedList<QueryUnitAttemptId> list = unAssignedTaskMap.get(volumeId);
+      if (list == null) {
+        list = new LinkedList<QueryUnitAttemptId>();
+        unAssignedTaskMap.put(volumeId, list);
+      }
+      list.add(attemptId);
+
+      if(!volumeUsageMap.containsKey(volumeId)) volumeUsageMap.put(volumeId, 0);
+    }
+
+    public LinkedList<QueryUnitAttemptId> getQueryUnitAttemptIdList(ContainerId containerId){
+      Integer volumeId;
+
+      if (!assignedContainerMap.containsKey(containerId)) {
+        volumeId = assignVolumeId();
+        assignedContainerMap.put(containerId, volumeId);
+      } else {
+        volumeId = assignedContainerMap.get(containerId);
+      }
+
+      LinkedList<QueryUnitAttemptId> list = null;
+      if (unAssignedTaskMap.size() >  0) {
+        int retry = unAssignedTaskMap.size();
+        do {
+          list = unAssignedTaskMap.get(volumeId);
+          if (list == null || list.size() == 0) {
+            //clean and reassign remaining volume
+            unAssignedTaskMap.remove(volumeId);
+            volumeUsageMap.remove(volumeId);
+            if (volumeId < 0) break; //  processed all block on disk
+
+            volumeId = assignVolumeId();
+            assignedContainerMap.put(containerId, volumeId);
+            retry--;
+          } else {
+            break;
+          }
+        } while (retry > 0);
+      }
+      return list;
+    }
+
+    public Integer assignVolumeId(){
+      Map.Entry<Integer, Integer> volumeEntry = null;
+
+      for (Map.Entry<Integer, Integer> entry : volumeUsageMap.entrySet()) {
+        if(volumeEntry == null) volumeEntry = entry;
+
+        if (volumeEntry.getValue() >= entry.getValue()) {
+          volumeEntry = entry;
+        }
+      }
+
+      if(volumeEntry != null){
+        volumeUsageMap.put(volumeEntry.getKey(), volumeEntry.getValue() + 1);
+        LOG.info("Assigned host : " + host + " Volume : " + volumeEntry.getKey() + ", concurrency : "
+            + volumeUsageMap.get(volumeEntry.getKey()));
+        return volumeEntry.getKey();
+      } else {
+         return -1;  // processed all block on disk
+      }
+    }
+
+    public String getHost() {
+      return host;
+    }
+  }
+
   private class ScheduledRequests {
     private final HashSet<QueryUnitAttemptId> leafTasks = new HashSet<QueryUnitAttemptId>();
     private final HashSet<QueryUnitAttemptId> nonLeafTasks = new HashSet<QueryUnitAttemptId>();
-    private final Map<String, LinkedList<QueryUnitAttemptId>> leafTasksHostMapping =
-        new HashMap<String, LinkedList<QueryUnitAttemptId>>();
+    private Map<String, TaskBlockLocation> leafTaskHostMapping = new HashMap<String, TaskBlockLocation>();
     private final Map<String, LinkedList<QueryUnitAttemptId>> leafTasksRackMapping =
         new HashMap<String, LinkedList<QueryUnitAttemptId>>();
 
     public void addLeafTask(TaskScheduleEvent event) {
-      for (String host : event.getHosts()) {
-        String hostName = NetUtils.normalizeHostName(host);
-        LinkedList<QueryUnitAttemptId> list = leafTasksHostMapping.get(hostName);
-        if (list == null) {
-          list = new LinkedList<QueryUnitAttemptId>();
-          leafTasksHostMapping.put(hostName, list);
+      List<QueryUnit.DataLocation> locations = event.getDataLocations();
+
+      for (QueryUnit.DataLocation location : locations) {
+        String host = location.getHost();
+
+        TaskBlockLocation taskBlockLocation = leafTaskHostMapping.get(host);
+        if (taskBlockLocation == null) {
+          taskBlockLocation = new TaskBlockLocation(host);
+          leafTaskHostMapping.put(host, taskBlockLocation);
         }
-        list.add(event.getAttemptId());
+        taskBlockLocation.addQueryUnitAttemptId(location.getVolumeId(), event.getAttemptId());
+
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Added attempt req to host " + hostName);
+          LOG.debug("Added attempt req to host " + host);
         }
       }
-      for (String rack: event.getRacks()) {
+      for (String rack : event.getRacks()) {
         LinkedList<QueryUnitAttemptId> list = leafTasksRackMapping.get(rack);
         if (list == null) {
           list = new LinkedList<QueryUnitAttemptId>();
@@ -296,24 +388,32 @@ public class TaskSchedulerImpl extends AbstractService
       return nonLeafTasks.size();
     }
 
-    public Set<QueryUnitAttemptId> AssignedRequest = new HashSet<QueryUnitAttemptId>();
+    public Set<QueryUnitAttemptId> assignedRequest = new HashSet<QueryUnitAttemptId>();
 
     public void assignToLeafTasks(List<TaskRequestEvent> taskRequests) {
       Iterator<TaskRequestEvent> it = taskRequests.iterator();
-      LOG.info("Got task requests " + taskRequests.size());
 
       TaskRequestEvent taskRequest;
       while (it.hasNext() && leafTasks.size() > 0) {
         taskRequest = it.next();
-        ContainerProxy container = context.getContainer(taskRequest.getContainerId());
-        String hostName = NetUtils.normalizeHostName(container.getTaskHostName());
+        LOG.info("====> assignToLeafTasks: " + taskRequest.getExecutionBlockId());
+        ContainerProxy container = context.getResourceAllocator().getContainer(taskRequest.getContainerId());
+        String host = container.getTaskHostName();
 
         QueryUnitAttemptId attemptId = null;
+        LinkedList<QueryUnitAttemptId> list = null;
 
-        // local allocation
-        LinkedList<QueryUnitAttemptId> list = leafTasksHostMapping.get(hostName);
-        while(list != null && list.size() > 0) {
+        // local disk allocation
+        if(!leafTaskHostMapping.containsKey(host)){
+          host = NetUtils.normalizeHost(host);
+        }
 
+        TaskBlockLocation taskBlockLocation = leafTaskHostMapping.get(host);
+        if (taskBlockLocation != null) {
+          list = taskBlockLocation.getQueryUnitAttemptIdList(taskRequest.getContainerId());
+        }
+
+        while (list != null && list.size() > 0) {
           QueryUnitAttemptId tId = list.removeFirst();
 
           if (leafTasks.contains(tId)) {
@@ -327,7 +427,7 @@ public class TaskSchedulerImpl extends AbstractService
 
         // rack allocation
         if (attemptId == null) {
-          String rack = RackResolver.resolve(hostName).getNetworkLocation();
+          String rack = RackResolver.resolve(host).getNetworkLocation();
           list = leafTasksRackMapping.get(rack);
           while(list != null && list.size() > 0) {
 
@@ -352,7 +452,7 @@ public class TaskSchedulerImpl extends AbstractService
 
         if (attemptId != null) {
           QueryUnit task = context.getQuery()
-              .getSubQuery(attemptId.getSubQueryId()).getQueryUnit(attemptId.getQueryUnitId());
+              .getSubQuery(attemptId.getQueryUnitId().getExecutionBlockId()).getQueryUnit(attemptId.getQueryUnitId());
           QueryUnitRequest taskAssign = new QueryUnitRequestImpl(
               attemptId,
               new ArrayList<Fragment>(task.getAllFragments()),
@@ -365,8 +465,8 @@ public class TaskSchedulerImpl extends AbstractService
 
           context.getEventHandler().handle(new TaskAttemptAssignedEvent(attemptId,
               taskRequest.getContainerId(),
-              container.getTaskHostName(), container.getTaskPort()));
-          AssignedRequest.add(attemptId);
+              host, container.getTaskPort()));
+          assignedRequest.add(attemptId);
 
           totalAssigned++;
           taskRequest.getCallback().run(taskAssign.getProto());
@@ -385,6 +485,7 @@ public class TaskSchedulerImpl extends AbstractService
       TaskRequestEvent taskRequest;
       while (it.hasNext()) {
         taskRequest = it.next();
+        LOG.info("====> assignToNonLeafTasks: " + taskRequest.getExecutionBlockId());
 
         QueryUnitAttemptId attemptId;
         // random allocation
@@ -394,7 +495,8 @@ public class TaskSchedulerImpl extends AbstractService
           LOG.debug("Assigned based on * match");
 
           QueryUnit task;
-          task = context.getSubQuery(attemptId.getSubQueryId()).getQueryUnit(attemptId.getQueryUnitId());
+          task = context.getSubQuery(
+              attemptId.getQueryUnitId().getExecutionBlockId()).getQueryUnit(attemptId.getQueryUnitId());
           QueryUnitRequest taskAssign = new QueryUnitRequestImpl(
               attemptId,
               Lists.newArrayList(task.getAllFragments()),
@@ -413,7 +515,7 @@ public class TaskSchedulerImpl extends AbstractService
             }
           }
 
-          ContainerProxy container = context.getContainer(
+          ContainerProxy container = context.getResourceAllocator().getContainer(
               taskRequest.getContainerId());
           context.getEventHandler().handle(new TaskAttemptAssignedEvent(attemptId,
               taskRequest.getContainerId(), container.getTaskHostName(), container.getTaskPort()));
