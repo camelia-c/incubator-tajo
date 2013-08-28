@@ -22,7 +22,7 @@ import org.apache.tajo.engine.planner.logical.LogicalNode;
 import org.apache.tajo.engine.planner.rewrite.BasicQueryRewriteEngine;
 import org.apache.tajo.engine.planner.rewrite.FilterPushDownRule;
 import org.apache.tajo.engine.planner.rewrite.ProjectionPushDownRule;
-
+import org.apache.tajo.engine.planner.rewrite.OuterJoinRewriteRule;
 /**
  * This class optimizes a logical plan.
  */
@@ -32,6 +32,7 @@ public class LogicalOptimizer {
   public LogicalOptimizer() {
     rewriteEngine = new BasicQueryRewriteEngine();
 
+    rewriteEngine.addRewriteRule(new OuterJoinRewriteRule());
     rewriteEngine.addRewriteRule(new FilterPushDownRule());
     rewriteEngine.addRewriteRule(new ProjectionPushDownRule());
   }
