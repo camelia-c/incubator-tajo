@@ -75,6 +75,14 @@ public class YarnTajoResourceManager implements WorkerResourceManager {
   public void stop() {
   }
 
+  public Map<String, WorkerResource> getWorkers() {
+    return new HashMap<String, WorkerResource>();
+  }
+
+  public int getNumClusterSlots() {
+    return 0;
+  }
+
   @Override
   public void workerHeartbeat(TajoMasterProtocol.TajoHeartbeat request) {
     //nothing to do
@@ -260,7 +268,7 @@ public class YarnTajoResourceManager implements WorkerResourceManager {
 
     final Resource resource = Records.newRecord(Resource.class);
     // TODO - get default value from conf
-    resource.setMemory(256);
+    resource.setMemory(2048);
     resource.setVirtualCores(1);
 
     Map<String, ByteBuffer> myServiceData = new HashMap<String, ByteBuffer>();

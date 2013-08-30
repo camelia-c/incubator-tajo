@@ -3,6 +3,8 @@ Tajo Change Log
 Release 0.2.0 - unreleased
 
   NEW FEATURES
+
+    TAJO-59: Implement Char Datum Type. (jihoon)
    
     TAJO-96: Design and implement rewrite rule interface and the rewrite rule 
     engine. (hyunsik)
@@ -14,6 +16,8 @@ Release 0.2.0 - unreleased
     TAJO-33: Implement a basic query progress indicator. (hyunsik)
 
   IMPROVEMENTS
+
+    TAJO-136: Broadcast join should be enabled. (hyunsik)
 
     TAJO-127: Implement Tajo Resource Manager. (hyoungjunkim via hyunsik)
 
@@ -107,6 +111,9 @@ Release 0.2.0 - unreleased
     TAJO-2: remove all @author tags and update license header. (hyunsik)
 
   BUG FIXES
+
+    TAJO-137: Unreleased resources and wrong allocation requests in
+    TajoWorkerResourceManager. (hyoungjunkim via hyunsik)
 
     TAJO-130: Same queryConf file conflicts. (jinho)
 

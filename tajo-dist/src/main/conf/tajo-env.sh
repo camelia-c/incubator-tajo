@@ -52,5 +52,7 @@ export TAJO_OPTS=-XX:+PrintGCTimeStamps
 # The scheduling priority for daemon processes.  See 'man nice'.
 # export TAJO_NICENESS=10
 
-export TAJO_WORKER_STANDBY_MODE=true
+# Tajo Distributed Execution Mode
+# the default mode is on-demand mode using YarnTajoResourceManager.
+# export TAJO_WORKER_STANDBY_MODE=yes
 
