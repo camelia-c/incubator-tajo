@@ -36,14 +36,22 @@ import org.apache.tajo.catalog.Column;
 import com.google.common.collect.Sets;
 import java.util.Set;
 import java.util.Iterator;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import java.util.List;
 import java.util.Stack;
+import java.util.Map;
+import java.util.HashMap;
+
+import org.apache.tajo.engine.utils.OuterJoinUtil;
 
 // camelia --
-// for the moment, this is just a stub
+//this is a stub - working on...
 public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> implements RewriteRule {
   private static final String NAME = "OuterJoinRewrite";
+  private static OuterJoinUtil oju2 = OuterJoinUtil.getOuterJoinUtil();
+  private static final Log LOG = LogFactory.getLog(OuterJoinRewriteRule.class);
 
   @Override
   public String getName() {
@@ -64,7 +72,32 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
 
     Stack<LogicalNode> stack = new Stack<LogicalNode>();
 
-    visitChild(plan, root, stack, 10);
+    //check if there is at least one outer join in the whole plan
+    boolean hasOuter = false;
+    for (String key : oju2.allTables.keySet()){
+       if(oju2.allTables.get(key).countLeft + oju2.allTables.get(key).countRight + oju2.allTables.get(key).countFull > 1){
+          hasOuter = true;
+       }
+    }
+    if(hasOuter){
+       LOG.info("********** IT HAS OUTER JOIN => PROCEED TO REWRITING\n");
+       Stack<String> tablesStack=new Stack<String>();                      //stack for tables to be processed 
+       Map<String,String> inStackTables = new HashMap<String,String>();    //hash map for tables to be processed 
+       Map<String,String> processedTables = new HashMap<String,String>();  //hash map for already processed tables
+       String a;
+
+       //firstly, rewriting takes place for situations where there are tables with countNullSupplying > 1; for these tables only the last join where it is null supplying has effect, the other unilateral outer joins where it is null supplying can be converted to inner joins. The rewriting will transform only unilateral outer joins (left/right) to inner joins, where needed. 
+       
+
+
+       //secondly, all null restricted tables are processes, to change, where appropriate, their outer joins to more restrictive join types
+   
+
+
+       visitChild(plan, root, stack, 10);
+    }
+
+    
     return plan;
   }
 
