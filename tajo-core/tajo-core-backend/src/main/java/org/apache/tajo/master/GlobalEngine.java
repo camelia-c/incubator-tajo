@@ -189,7 +189,7 @@ public class GlobalEngine extends AbstractService {
   private LogicalPlan createLogicalPlan(Expr expression) throws PlanningException {
 
     LogicalPlan plan = planner.createPlan(expression);
-<<<<<<< HEAD
+
     //camelia --
     try{
        LogicalRootNode rootNode = (LogicalRootNode) plan.getRootBlock().getRoot();
@@ -209,7 +209,7 @@ public class GlobalEngine extends AbstractService {
     }
  
     //camelia --
-    LOG.info("optimized LogicalPlan:\n" + optimizedPlan);
+    LOG.info("optimized LogicalPlan:\n" + plan.getRootBlock().getRoot());
     //-- camelia
 
     return plan;
