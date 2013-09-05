@@ -50,6 +50,16 @@ public class PlannerUtil {
 
     return baseNode.getType() == NodeType.CREATE_TABLE || baseNode.getType() == NodeType.DROP_TABLE;
   }
+
+  public static boolean checkIfDMLPlan(LogicalNode node) {
+    LogicalNode baseNode = node;
+    if (node instanceof LogicalRootNode) {
+      baseNode = ((LogicalRootNode) node).getChild();
+    }
+
+    return baseNode.getType() == NodeType.INSERT;
+  }
+
   
   public static String [] getLineage(LogicalNode node) {
     LogicalNode [] scans =  PlannerUtil.findAllNodes(node, NodeType.SCAN);

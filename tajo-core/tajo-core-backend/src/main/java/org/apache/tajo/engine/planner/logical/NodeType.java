@@ -31,6 +31,7 @@ public enum NodeType {
   EXCEPT(ExceptNode.class),
   EXPRS(EvalExprNode.class),
   GROUP_BY(GroupbyNode.class),
+  INSERT(CreateTableNode.class),
   INTERSECT(IntersectNode.class),
   LIMIT(LimitNode.class),
   JOIN(JoinNode.class),

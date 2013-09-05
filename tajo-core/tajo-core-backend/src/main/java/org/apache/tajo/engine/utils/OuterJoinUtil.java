@@ -29,11 +29,12 @@ import java.util.Stack;
 public class OuterJoinUtil{
 
   private static OuterJoinUtil oju;
-  public Map<String, TableOuterJoined> allTables; 
+  // allTables has form  :   <blocName , HashMap <tableName, objTableOuterJoined>>
+  public Map<String, HashMap<String, TableOuterJoined>>  allTables; 
   private static final Log LOG = LogFactory.getLog(OuterJoinUtil.class);
 
   private OuterJoinUtil(){
-    allTables = new HashMap<String,TableOuterJoined>();
+    allTables = new HashMap<String,HashMap<String,TableOuterJoined>>();
   }
 
   public static OuterJoinUtil getOuterJoinUtil(){
@@ -44,34 +45,39 @@ public class OuterJoinUtil{
   }
 
   public void printAllTables(String blockName){
-     for (String key : this.allTables.keySet()){
-        if(oju.allTables.get(key).queryBlockName.equals(blockName)==true) {
-           LOG.info("" + oju.allTables.get(key).toString() + "\n");
-        }
+     HashMap<String,TableOuterJoined> tablesInBlock = oju.allTables.get(blockName);
+     for (String key : tablesInBlock.keySet()){        
+           LOG.info("[QB "+ blockName + " ]" + tablesInBlock.get(key).toString() + "\n");
      }
   }
 
   public void printAllTables(){
      for (String key : this.allTables.keySet()){
-        LOG.info("" + oju.allTables.get(key).toString() + "\n");
-        
+        HashMap<String,TableOuterJoined> tablesInBlock = oju.allTables.get(key);
+        for (String key2 : tablesInBlock.keySet()){        
+           LOG.info("[QB "+ key + " ]" + tablesInBlock.get(key2).toString() + "\n");
+        }
      }
   }
 
-
-  public TableOuterJoined getTheTable(String tableName, String blockName) {
-     for (Map.Entry<String, TableOuterJoined> entry : oju.allTables.entrySet()) {
-        if((entry.getKey().equals(tableName) == true) && ( entry.getValue().queryBlockName.equals(blockName)==true))
-           return entry.getValue();
+  // puts in the hashmap corresponding to blockName a new pair <tableName, new TableOuterJoined(...)>
+  public void putTheTable(String blockName, FromTable ft){
+     TableOuterJoined toj = new TableOuterJoined(ft);
+     if (this.oju.allTables.containsKey(blockName) == false){
+        this.oju.allTables.put(blockName, new HashMap<String,TableOuterJoined>());
      }
-     return null;
+     this.oju.allTables.get(blockName).put(toj.theTable.getTableName(), toj);
+  }
+
+  // gets the TableOuterJoined of a given tableName in a given blockName
+  public TableOuterJoined getTheTable(String blockName, String tableName) {
+     return this.oju.allTables.get(blockName).get(tableName);
   }
 
 
    
   public static class TableOuterJoined{
      public FromTable theTable;
-     public String queryBlockName;
      public boolean isNullSupplying;  //if it is a null supplying table in any join
      public int countLeft;  //number of left outer joins that it participates in
      public int countRight; //number of right outer joins that it participates in
@@ -81,7 +87,7 @@ public class OuterJoinUtil{
      public boolean isNullRestricted; //whether from some inner join condition or null-intoleratnt selection (WHERE clause)
      public int depthRestricted; //the depth under which it is restricted
   
-     public TableOuterJoined(FromTable ft, String blockName){
+     public TableOuterJoined(FromTable ft){
          this.theTable = ft;
          this.countLeft = 0;
          this.countRight = 0;
@@ -91,12 +97,10 @@ public class OuterJoinUtil{
          this.countNullSupplying = 0;
          this.isNullRestricted = false;
          this.depthRestricted = -1;
-         this.queryBlockName = blockName;
      }
 
      public String toString(){
-         String s = "[QB " + this.queryBlockName + "]";
-         s += " " + this.theTable.getTableName() + "  " + this.countLeft + " " + this.countRight + " " + this.countFull + " " + this.countInner + " ";
+         String s =" " + this.theTable.getTableName() + "  " + this.countLeft + " " + this.countRight + " " + this.countFull + " " + this.countInner + " ";
          s += (this.isNullSupplying)? "yes":"no";
          s += " " + this.countNullSupplying;
          s += (this.isNullRestricted)?"yes":"no";

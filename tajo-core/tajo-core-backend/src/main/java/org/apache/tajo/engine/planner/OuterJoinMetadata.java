@@ -40,7 +40,7 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
    private static String currentBlockName;
 
    public OuterJoinMetadata(LogicalPlan plan) throws PlanningException {
-      //for each block in the plan, process its queryblock and build one OuterJoinUtil for it
+      //for each block in the plan, process its queryblock 
       Collection<QueryBlock> qBlocks = plan.getQueryBlocks();
       Iterator it = qBlocks.iterator();
       while(it.hasNext()) {
@@ -54,8 +54,7 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
         while(it2.hasNext()) {
            ScanNode scan = (ScanNode) it2.next();
            LOG.info("******** TABLE:" + scan.getFromTable().getTableName());
-           TableOuterJoined aTable = new OuterJoinUtil.TableOuterJoined(scan.getFromTable(), qb.getName());
-           oju2.allTables.put(scan.getFromTable().getTableName(), aTable);
+           oju2.putTheTable(qb.getName(), scan.getFromTable());
         }
 
          //go visit nodes in this qb, to count
@@ -82,6 +81,15 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
       String leftexprname;
       FieldEval fev = null;
 
+      //ensure that the right child is a ScanNode, as in a left deep tree query plan. Otherwise raise exception
+      //if (right.getClass().isInstance(ScanNode.class)==false)
+      //   throw new PlanningException(" ERROR: The right child of the join node in left deep tree is not ScanNode");
+
+      
+      
+      if (right.getClass().getName().equals("org.apache.tajo.engine.planner.logical.ScanNode")==false)      
+         throw new PlanningException(" ERROR: The right child of the join node in left deep tree is not ScanNode, but " + right.getClass().getName());
+
       if (joinNode.hasJoinQual())
         if((joinNode.getJoinQual().getRightExpr().getType() == EvalType.FIELD)&&(joinNode.getJoinQual().getLeftExpr().getType() == EvalType.FIELD)){
          EvalNode joinQual = joinNode.getJoinQual();
@@ -103,41 +111,41 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
 
           if(joinType == JoinType.LEFT_OUTER){
 	       //it is the right operand in a left outer join
-	       oju2.getTheTable(((ScanNode)right). getTableId(), currentBlockName).countLeft++;
-	       oju2.getTheTable(((ScanNode)right). getTableId(), currentBlockName).isNullSupplying = true;
-	       oju2.getTheTable(((ScanNode)right). getTableId(), currentBlockName).countNullSupplying++;
+	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).countLeft++;
+	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).isNullSupplying = true;
+	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).countNullSupplying++;
 
 	       //based on the join condition, put info for its left operand as well
-	       oju2.getTheTable(leftexprname, currentBlockName).countLeft++;      
+	       oju2.getTheTable(currentBlockName, leftexprname).countLeft++;      
 	  }
 	  else if(joinType == JoinType.FULL_OUTER){
 	       //it is the right operand in a full outer join
-	       oju2.getTheTable(((ScanNode)right). getTableId(), currentBlockName).countFull++;
-	       oju2.getTheTable(((ScanNode)right). getTableId(), currentBlockName).isNullSupplying = true;
+	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).countFull++;
+	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).isNullSupplying = true;
 	       
 	       //based on the join condition, put info for its left operand as well
-	       oju2.getTheTable(leftexprname, currentBlockName).countFull++;  
-	       oju2.getTheTable(leftexprname, currentBlockName).isNullSupplying = true;     
+	       oju2.getTheTable(currentBlockName, leftexprname).countFull++;  
+	       oju2.getTheTable(currentBlockName, leftexprname).isNullSupplying = true;     
 	  } 
 	  else if(joinType == JoinType.RIGHT_OUTER){
 	       //it is the right operand in a right outer join
-	       oju2.getTheTable(((ScanNode)right). getTableId(), currentBlockName).countRight++;
+	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).countRight++;
 
 	       //based on the join condition, put info for its left operand as well
-	       oju2.getTheTable(leftexprname, currentBlockName).countRight++;  
-	       oju2.getTheTable(leftexprname, currentBlockName).isNullSupplying = true; 
-	       oju2.getTheTable(leftexprname, currentBlockName).countNullSupplying++;
+	       oju2.getTheTable(currentBlockName, leftexprname).countRight++;  
+	       oju2.getTheTable(currentBlockName, leftexprname).isNullSupplying = true; 
+	       oju2.getTheTable(currentBlockName, leftexprname).countNullSupplying++;
 	  } 
 	  else if(joinType == JoinType.INNER){
 	       //it is the right operand in an inner join
-	       oju2.getTheTable(((ScanNode)right). getTableId(), currentBlockName).countInner++;
-	       oju2.getTheTable(((ScanNode)right). getTableId(), currentBlockName).isNullRestricted = true;
-	       oju2.getTheTable(((ScanNode)right). getTableId(), currentBlockName).depthRestricted = depth;
+	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).countInner++;
+	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).isNullRestricted = true;
+	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).depthRestricted = depth;
 
 	       //based on the join condition, put info for its left operand as well
-	       oju2.getTheTable(leftexprname, currentBlockName).countInner++;  
-	       oju2.getTheTable(leftexprname, currentBlockName).isNullRestricted = true;
-	       oju2.getTheTable(leftexprname, currentBlockName).depthRestricted = depth;
+	       oju2.getTheTable(currentBlockName, leftexprname).countInner++;  
+	       oju2.getTheTable(currentBlockName, leftexprname).isNullRestricted = true;
+	       oju2.getTheTable(currentBlockName, leftexprname).depthRestricted = depth;
 	       
 	  } 
 
@@ -162,17 +170,17 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
          if(lefttablename.equals(righttablename) == false){
              //it is an inner join
              
-             oju2.getTheTable(lefttablename, currentBlockName).countInner++;  
-             oju2.getTheTable(lefttablename, currentBlockName).isNullRestricted = true;
-             oju2.getTheTable(lefttablename, currentBlockName).depthRestricted = 0;
-             oju2.getTheTable(righttablename, currentBlockName).countInner++;  
-             oju2.getTheTable(righttablename, currentBlockName).isNullRestricted = true;
-             oju2.getTheTable(righttablename, currentBlockName).depthRestricted = 0;
+             oju2.getTheTable(currentBlockName, lefttablename).countInner++;  
+             oju2.getTheTable(currentBlockName, lefttablename).isNullRestricted = true;
+             oju2.getTheTable(currentBlockName, lefttablename).depthRestricted = 0;
+             oju2.getTheTable(currentBlockName, righttablename).countInner++;  
+             oju2.getTheTable(currentBlockName, righttablename).isNullRestricted = true;
+             oju2.getTheTable(currentBlockName, righttablename).depthRestricted = 0;
          }
          else {
              //it is a selection involving 2 columns of the same table
-             oju2.getTheTable(lefttablename, currentBlockName).isNullRestricted = true;
-             oju2.getTheTable(lefttablename, currentBlockName).depthRestricted = 0;
+             oju2.getTheTable(currentBlockName, lefttablename).isNullRestricted = true;
+             oju2.getTheTable(currentBlockName, lefttablename).depthRestricted = 0;
          }
      }
      else{
@@ -180,26 +188,26 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
          //ON THE LEFT
          if((wherecond.getLeftExpr().getType() == EvalType.FIELD) && (wherecond.getType() != EvalType.IS_NULL)){
            String lefttablename= ((FieldEval) wherecond.getLeftExpr()).getTableId();
-           oju2.getTheTable(lefttablename, currentBlockName).isNullRestricted = true;
-           oju2.getTheTable(lefttablename, currentBlockName).depthRestricted = 0;
+           oju2.getTheTable(currentBlockName, lefttablename).isNullRestricted = true;
+           oju2.getTheTable(currentBlockName, lefttablename).depthRestricted = 0;
          }
          else if (wherecond.getLeftExpr().getType() == EvalType.FUNCTION){
            String lefttablename= ((FieldEval) wherecond.getLeftExpr()).getTableId();
-           oju2.getTheTable(lefttablename, currentBlockName).isNullRestricted = true;
-           oju2.getTheTable(lefttablename, currentBlockName).depthRestricted = 0;
+           oju2.getTheTable(currentBlockName, lefttablename).isNullRestricted = true;
+           oju2.getTheTable(currentBlockName, lefttablename).depthRestricted = 0;
          }
  
          //ON THE RIGHT
          //-- note: the (wherecond.getType()!=EvalNode.Type.IS) test is useless on the right case, it's always true
          if((wherecond.getRightExpr().getType() == EvalType.FIELD) && (wherecond.getType() != EvalType.IS_NULL)){
            String righttablename= ((FieldEval) wherecond.getRightExpr()).getTableId();
-           oju2.getTheTable(righttablename, currentBlockName).isNullRestricted = true;
-           oju2.getTheTable(righttablename, currentBlockName).depthRestricted = 0;
+           oju2.getTheTable(currentBlockName, righttablename).isNullRestricted = true;
+           oju2.getTheTable(currentBlockName, righttablename).depthRestricted = 0;
          }
          else if (wherecond.getRightExpr().getType() == EvalType.FUNCTION){
            String righttablename= ((FieldEval) wherecond.getRightExpr()).getTableId();
-           oju2.getTheTable(righttablename, currentBlockName).isNullRestricted = true;
-           oju2.getTheTable(righttablename, currentBlockName).depthRestricted = 0;
+           oju2.getTheTable(currentBlockName, righttablename).isNullRestricted = true;
+           oju2.getTheTable(currentBlockName, righttablename).depthRestricted = 0;
          }
      }
 
@@ -217,8 +225,6 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
       //in the un-optimized form, the query block has only one selection node that contains exactly the compound condition in the WHERE clause of the (sub)query
       EvalNode wherecond = selNode.getQual();
       recursiveWhere(wherecond,0);   
-
-
       visitChild(plan, selNode.getChild(), stack, depth + 1);
       stack.pop();
       return selNode;

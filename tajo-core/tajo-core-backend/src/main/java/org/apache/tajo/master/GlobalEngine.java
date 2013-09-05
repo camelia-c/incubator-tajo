@@ -54,6 +54,8 @@ import org.apache.tajo.master.querymaster.QueryJobManager;
 import org.apache.tajo.storage.StorageManager;
 import org.apache.tajo.storage.StorageUtil;
 import org.apache.tajo.engine.planner.OuterJoinMetadata;
+import org.apache.tajo.engine.planner.logical.NodeType;
+
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -183,7 +185,10 @@ public class GlobalEngine extends AbstractService {
     LogicalPlan plan = planner.createPlan(expression);
     //camelia --
     try{
-       OuterJoinMetadata ojmeta=new OuterJoinMetadata(plan);
+       LogicalRootNode rootNode = (LogicalRootNode) plan.getRootBlock().getRoot();
+       if ((PlannerUtil.checkIfDDLPlan(rootNode) == false) && (PlannerUtil.checkIfDMLPlan(rootNode) == false)){
+          OuterJoinMetadata ojmeta = new OuterJoinMetadata(plan);
+       }
     } catch(org.apache.tajo.engine.planner.PlanningException ex) {
        LOG.error("PlanningException in OuterJoinMetadata " + ex);
     }
