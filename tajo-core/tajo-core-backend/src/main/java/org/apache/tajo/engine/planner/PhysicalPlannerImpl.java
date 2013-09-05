@@ -153,6 +153,29 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
       case CROSS:
         LOG.info("The planner chooses [Nested Loop Join]");
         return new NLJoinExec(ctx, joinNode, outer, inner);
+      //camelia --
+      case LEFT_OUTER:
+         LOG.info("For left outer join ==> The planner chooses [modified Nested Loop Join]");
+         return new LeftOuter_NLJoinExec(ctx, joinNode, outer, inner);
+
+      case RIGHT_OUTER:
+         LOG.info("For right outer join ==> The planner chooses [modified Merge Join]");
+         SortSpec[][] sortSpecs2 = PlannerUtil.getSortKeysFromJoinQual(
+            joinNode.getJoinQual(), outer.getSchema(), inner.getSchema());
+         ExternalSortExec outerSort2 = new ExternalSortExec(ctx, sm,
+            new SortNode(sortSpecs2[0], outer.getSchema(), outer.getSchema()),
+            outer);
+         ExternalSortExec innerSort2 = new ExternalSortExec(ctx, sm,
+            new SortNode(sortSpecs2[1], inner.getSchema(), inner.getSchema()),
+            inner);
+
+         return new RightOuter_MergeJoinExec(ctx, joinNode, outerSort2, innerSort2,
+            sortSpecs2[0], sortSpecs2[1]);
+
+      case FULL_OUTER:
+         LOG.info("For full outer join ==> The planner chooses [modified Hash Join]");
+         return new FullOuter_HashJoinExec(ctx, joinNode, outer, inner);
+      //-- camelia
 
       case INNER:
         String [] outerLineage = PlannerUtil.getLineage(joinNode.getLeftChild());
