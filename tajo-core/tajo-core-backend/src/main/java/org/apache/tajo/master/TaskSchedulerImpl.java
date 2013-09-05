@@ -111,14 +111,13 @@ public class TaskSchedulerImpl extends AbstractService
 
         while(!stopEventHandling && !Thread.currentThread().isInterrupted()) {
           try {
-            Thread.sleep(1000);
+            Thread.sleep(100);
           } catch (InterruptedException e) {
             break;
           }
 
           schedule();
         }
-        //req.getCallback().run(stopTaskRunnerReq);
         LOG.info("TaskScheduler schedulingThread stopped");
       }
     };
@@ -324,7 +323,7 @@ public class TaskSchedulerImpl extends AbstractService
 
       if(volumeEntry != null){
         volumeUsageMap.put(volumeEntry.getKey(), volumeEntry.getValue() + 1);
-        LOG.info("Assigned host : " + host + " Volume : " + volumeEntry.getKey() + ", concurrency : "
+        LOG.info("Assigned host : " + host + " Volume : " + volumeEntry.getKey() + ", Concurrency : "
             + volumeUsageMap.get(volumeEntry.getKey()));
         return volumeEntry.getKey();
       } else {
@@ -459,7 +458,8 @@ public class TaskSchedulerImpl extends AbstractService
               new ArrayList<Fragment>(task.getAllFragments()),
               task.getOutputName(),
               false,
-              task.getLogicalPlan().toJson());
+              task.getLogicalPlan().toJson(),
+              context.getQueryMeta());
           if (task.getStoreTableNode().isLocal()) {
             taskAssign.setInterQuery();
           }
@@ -503,7 +503,8 @@ public class TaskSchedulerImpl extends AbstractService
               Lists.newArrayList(task.getAllFragments()),
               task.getOutputName(),
               false,
-              task.getLogicalPlan().toJson());
+              task.getLogicalPlan().toJson(),
+              context.getQueryMeta());
           if (task.getStoreTableNode().isLocal()) {
             taskAssign.setInterQuery();
           }

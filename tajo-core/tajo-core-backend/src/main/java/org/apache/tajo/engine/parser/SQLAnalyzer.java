@@ -18,6 +18,7 @@
 
 package org.apache.tajo.engine.parser;
 
+import com.google.common.base.Preconditions;
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -184,20 +185,10 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
       }
     }
 
-    Projection projection = new Projection();
+    Projection projection = visitSelect_list(ctx.select_list());
 
     if (ctx.set_qualifier() != null && ctx.set_qualifier().DISTINCT() != null) {
       projection.setDistinct();
-    }
-
-    if (ctx.select_list().MULTIPLY() != null) {
-      projection.setAll();
-    } else {
-      Target targets [] = new Target[ctx.select_list().derived_column().size()];
-      for (int i = 0; i < targets.length; i++) {
-        targets[i] = visitDerived_column(ctx.select_list().derived_column(i));
-      }
-      projection.setTargets(targets);
     }
 
     if (current != null) {
@@ -207,6 +198,51 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
     current = projection;
 
     return current;
+  }
+
+  /**
+   * <pre>
+   *   select_list
+   *   : MULTIPLY
+   *   | select_sublist (COMMA select_sublist)*
+   *   ;
+   * </pre>
+   * @param ctx
+   * @return
+   */
+  @Override
+  public Projection visitSelect_list(SQLParser.Select_listContext ctx) {
+    Projection projection = new Projection();
+    if (ctx.MULTIPLY() != null) {
+      projection.setAll();
+    } else {
+      Target [] targets = new Target[ctx.select_sublist().size()];
+      for (int i = 0; i < targets.length; i++) {
+        targets[i] = visitSelect_sublist(ctx.select_sublist(i));
+      }
+      projection.setTargets(targets);
+    }
+
+    return projection;
+  }
+
+  /**
+   * <pre>
+   *   select_sublist
+   *   : derived_column
+   *   | asterisked_qualifier=Identifier DOT MULTIPLY
+   *   ;
+   * </pre>
+   * @param ctx
+   * @return
+   */
+  @Override
+  public Target visitSelect_sublist(SQLParser.Select_sublistContext ctx) {
+    if (ctx.asterisked_qualifier != null) {
+      return new Target(new ColumnReferenceExpr(ctx.asterisked_qualifier.getText(), "*"));
+    } else {
+      return visitDerived_column(ctx.derived_column());
+    }
   }
 
   @Override
@@ -299,7 +335,7 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
   public Join visitJoined_table_primary(SQLParser.Joined_table_primaryContext ctx) {
     Join join;
     if (ctx.CROSS() != null) {
-      join = new Join(JoinType.CROSS_JOIN);
+      join = new Join(JoinType.CROSS);
     } else if (ctx.UNION() != null) {
       join = new Join(JoinType.UNION);
     } else { // qualified join or natural
@@ -557,15 +593,15 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
   @Override
   public InPredicate visitIn_predicate(SQLParser.In_predicateContext ctx) {
     return new InPredicate(visitChildren(ctx.numeric_value_expression()),
-        visitChildren(ctx.in_predicate_value()));
+        visitIn_predicate_value(ctx.in_predicate_value()), ctx.NOT() != null);
   }
 
   @Override
-  public ValueListExpr visitIn_value_list(SQLParser.In_value_listContext ctx) {
-    int size = ctx.numeric_value_expression().size();
+  public ValueListExpr visitIn_predicate_value(SQLParser.In_predicate_valueContext ctx) {
+    int size = ctx.in_value_list().numeric_value_expression().size();
     Expr [] exprs = new Expr[size];
     for (int i = 0; i < size; i++) {
-      exprs[i] = visit(ctx.numeric_value_expression(i));
+      exprs[i] = visit(ctx.in_value_list().numeric_value_expression(i));
     }
     return new ValueListExpr(exprs);
   }
@@ -592,10 +628,8 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
 
   @Override
   public IsNullPredicate visitNull_predicate(SQLParser.Null_predicateContext ctx) {
-    boolean not = ctx.NOT() != null;
-
     ColumnReferenceExpr predicand = (ColumnReferenceExpr) visit(ctx.numeric_value_expression());
-    return new IsNullPredicate(not, predicand);
+    return new IsNullPredicate(ctx.NOT() != null, predicand);
   }
 
   @Override
@@ -889,6 +923,48 @@ public class SQLAnalyzer extends SQLParserBaseVisitor<Expr> {
     public Integer getScale() {
       return this.scale;
     }
+  }
+
+  @Override
+  public Expr visitInsert_statement(SQLParser.Insert_statementContext ctx) {
+    Insert insertExpr = new Insert();
+
+    if (ctx.OVERWRITE() != null) {
+      insertExpr.setOverwrite();
+    }
+
+    if (ctx.table_name() != null) {
+      insertExpr.setTableName(ctx.table_name().getText());
+
+      if (ctx.column_name_list() != null) {
+        String [] targetColumns = new String[ctx.column_name_list().Identifier().size()];
+        for (int i = 0; i < targetColumns.length; i++) {
+          targetColumns[i] = ctx.column_name_list().Identifier().get(i).getText();
+        }
+
+        insertExpr.setTargetColumns(targetColumns);
+      }
+    }
+
+    if (ctx.LOCATION() != null) {
+      insertExpr.setLocation(stripQuote(ctx.path.getText()));
+
+      if (ctx.USING() != null) {
+        insertExpr.setStorageType(ctx.file_type.getText());
+
+        if (ctx.param_clause() != null) {
+          insertExpr.setParams(getParams(ctx.param_clause()));
+        }
+      }
+    }
+
+    insertExpr.setSubQuery(visitQuery_expression(ctx.query_expression()));
+
+    Preconditions.checkState(insertExpr.hasTableName() || insertExpr.hasLocation(),
+        "Either a table name or a location should be given.");
+    Preconditions.checkState(insertExpr.hasTableName() ^ insertExpr.hasLocation(),
+        "A table name and a location cannot coexist.");
+    return insertExpr;
   }
 
   @Override

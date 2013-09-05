@@ -46,11 +46,8 @@ import org.apache.tajo.engine.planner.logical.GroupbyNode;
 import org.apache.tajo.engine.planner.logical.NodeType;
 import org.apache.tajo.engine.planner.logical.ScanNode;
 import org.apache.tajo.engine.planner.logical.StoreTableNode;
-import org.apache.tajo.master.ExecutionBlock;
-import org.apache.tajo.master.TaskRunnerGroupEvent;
+import org.apache.tajo.master.*;
 import org.apache.tajo.master.TaskRunnerGroupEvent.EventType;
-import org.apache.tajo.master.TaskScheduler;
-import org.apache.tajo.master.TaskSchedulerImpl;
 import org.apache.tajo.master.event.*;
 import org.apache.tajo.storage.Fragment;
 import org.apache.tajo.storage.StorageManager;
@@ -72,6 +69,7 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
 
   private static final Log LOG = LogFactory.getLog(SubQuery.class);
 
+  private QueryMeta queryMeta;
   private ExecutionBlock block;
   private int priority;
   private TableMeta meta;
@@ -652,11 +650,6 @@ public class SubQuery implements EventHandler<SubQueryEvent> {
       meta = desc.getMeta();
 
       // TODO - should be change the inner directory
-      Path oldPath = new Path(inputPath, "data");
-      FileSystem fs = inputPath.getFileSystem(subQuery.context.getConf());
-      if (fs.exists(oldPath)) {
-        inputPath = oldPath;
-      }
       List<Fragment> fragments = subQuery.getStorageManager().getSplits(scan.getTableId(), meta, inputPath);
 
       QueryUnit queryUnit;
