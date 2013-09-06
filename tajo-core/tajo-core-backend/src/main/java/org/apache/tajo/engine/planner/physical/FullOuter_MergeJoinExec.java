@@ -37,7 +37,7 @@ import java.util.Iterator;
 import java.util.List;
 
 //THIS IS A STUB YET
-public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
+public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
   // from logical plan
   private JoinNode joinNode;
   private EvalNode joinQual;
@@ -66,7 +66,7 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
   private final Projector projector;
   private final EvalContext [] evalContexts;
 
-  public RightOuter_MergeJoinExec(TaskAttemptContext context, JoinNode plan, PhysicalExec outer,
+  public FullOuter_MergeJoinExec(TaskAttemptContext context, JoinNode plan, PhysicalExec outer,
       PhysicalExec inner, SortSpec[] outerSortKey, SortSpec[] innerSortKey) {
     super(context, plan.getInSchema(), plan.getOutSchema(), outer, inner);
     Preconditions.checkArgument(plan.hasJoinQual(), "Sort-merge join is only used for the equi-join, " +
@@ -124,7 +124,7 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
         while ((cmp = joincomparator.compare(outerTuple, innerTuple)) != 0) {
           if (cmp > 0) {
             //camelia --
-            //before getting a new tuple from the right, check if a leftnullpadded tuple should be built
+            //
 
             //-- camelia
             innerTuple = rightChild.next();

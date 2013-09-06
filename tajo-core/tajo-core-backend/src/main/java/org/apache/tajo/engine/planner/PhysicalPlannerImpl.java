@@ -44,6 +44,8 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
   protected final TajoConf conf;
   protected final StorageManager sm;
 
+  final long threshold = 1048576 * 128; // 64MB
+
   public PhysicalPlannerImpl(final TajoConf conf, final StorageManager sm) {
     this.conf = conf;
     this.sm = sm;
@@ -155,26 +157,96 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
         return new NLJoinExec(ctx, joinNode, outer, inner);
       //camelia --
       case LEFT_OUTER:
-         LOG.info("For left outer join ==> The planner chooses [modified Nested Loop Join]");
-         return new LeftOuter_NLJoinExec(ctx, joinNode, outer, inner);
+
+         String [] innerLineage4 = PlannerUtil.getLineage(joinNode.getRightChild());
+         long innerSize4 = estimateSizeRecursive(ctx, innerLineage4);
+         
+         if (innerSize4 < threshold) {
+           // we can implement left outer join using hash join, using the right operand as the build relation
+                    
+           LOG.info("For left outer join ==> The planner chooses [modified Hash Join]");
+           return new LeftOuter_HashJoinExec(ctx, joinNode, outer, inner);
+         }
+         else {
+           //the right operand is too large, so we opt for NL implementation of left outer join
+           LOG.info("For left outer join ==> The planner chooses [modified Nested Loop Join]");
+           return new LeftOuter_NLJoinExec(ctx, joinNode, outer, inner);
+         }
 
       case RIGHT_OUTER:
-         LOG.info("For right outer join ==> The planner chooses [modified Merge Join]");
-         SortSpec[][] sortSpecs2 = PlannerUtil.getSortKeysFromJoinQual(
-            joinNode.getJoinQual(), outer.getSchema(), inner.getSchema());
-         ExternalSortExec outerSort2 = new ExternalSortExec(ctx, sm,
-            new SortNode(sortSpecs2[0], outer.getSchema(), outer.getSchema()),
-            outer);
-         ExternalSortExec innerSort2 = new ExternalSortExec(ctx, sm,
-            new SortNode(sortSpecs2[1], inner.getSchema(), inner.getSchema()),
-            inner);
 
-         return new RightOuter_MergeJoinExec(ctx, joinNode, outerSort2, innerSort2,
-            sortSpecs2[0], sortSpecs2[1]);
+         //if the left operand is small enough => implement it as a left outer hash join with exchanged operators (note: blocking, but merge join is blocking as well)
+         String [] outerLineage4 = PlannerUtil.getLineage(joinNode.getLeftChild());
+         long outerSize4 = estimateSizeRecursive(ctx, outerLineage4);
+         if (outerSize4 < threshold){
+            LOG.info("For right outer join ==> The planner chooses [modified Hash Join]");
+           return new LeftOuter_HashJoinExec(ctx, joinNode, inner, outer);
+
+         }
+         else {
+
+            //the left operand is too large, so opt for merge join implementation
+            LOG.info("For right outer join ==> The planner chooses [modified Merge Join]");
+            SortSpec[][] sortSpecs2 = PlannerUtil.getSortKeysFromJoinQual(
+               joinNode.getJoinQual(), outer.getSchema(), inner.getSchema());
+            ExternalSortExec outerSort2 = new ExternalSortExec(ctx, sm,
+               new SortNode(sortSpecs2[0], outer.getSchema(), outer.getSchema()),
+               outer);
+            ExternalSortExec innerSort2 = new ExternalSortExec(ctx, sm,
+               new SortNode(sortSpecs2[1], inner.getSchema(), inner.getSchema()),
+               inner);
+
+            return new RightOuter_MergeJoinExec(ctx, joinNode, outerSort2, innerSort2,
+               sortSpecs2[0], sortSpecs2[1]);
+         }
 
       case FULL_OUTER:
-         LOG.info("For full outer join ==> The planner chooses [modified Hash Join]");
-         return new FullOuter_HashJoinExec(ctx, joinNode, outer, inner);
+         
+         String [] outerLineage2 = PlannerUtil.getLineage(joinNode.getLeftChild());
+         String [] innerLineage2 = PlannerUtil.getLineage(joinNode.getRightChild());
+         long outerSize2 = estimateSizeRecursive(ctx, outerLineage2);
+         long innerSize2 = estimateSizeRecursive(ctx, innerLineage2);
+
+         final long threshold2 = 1048576 * 128; // 64MB
+
+         boolean hashJoin2 = false;
+         if (outerSize2 < threshold2 || innerSize2 < threshold2) {
+           hashJoin2 = true;
+         }
+
+         if (hashJoin2) {
+           PhysicalExec selectedOuter2;
+           PhysicalExec selectedInner2;
+
+           // HashJoinExec loads the inner relation to memory.
+           if (outerSize2 <= innerSize2) {
+             selectedInner2 = outer;
+             selectedOuter2 = inner;
+           } else {
+             selectedInner2 = inner;
+             selectedOuter2 = outer;
+           }
+           LOG.info("For full outer join ==> The planner chooses [modified Hash Join]");
+           return new FullOuter_HashJoinExec(ctx, joinNode, selectedOuter2, selectedInner2);
+         }
+         else {
+             //if size too large, full outer merge join implementation 
+             LOG.info("For large full outer join ==> The planner chooses [modified Merge Join]");
+             SortSpec[][] sortSpecs3 = PlannerUtil.getSortKeysFromJoinQual(
+                joinNode.getJoinQual(), outer.getSchema(), inner.getSchema());
+             ExternalSortExec outerSort3 = new ExternalSortExec(ctx, sm,
+                new SortNode(sortSpecs3[0], outer.getSchema(), outer.getSchema()),
+                outer);
+             ExternalSortExec innerSort3 = new ExternalSortExec(ctx, sm,
+                new SortNode(sortSpecs3[1], inner.getSchema(), inner.getSchema()),
+                inner);
+
+             return new FullOuter_MergeJoinExec(ctx, joinNode, outerSort3, innerSort3,
+                sortSpecs3[0], sortSpecs3[1]);
+
+
+         }
+
       //-- camelia
 
       case INNER:

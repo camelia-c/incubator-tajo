@@ -29,6 +29,8 @@ import org.apache.tajo.storage.VTuple;
 
 import java.io.IOException;
 import org.apache.tajo.datum.*;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 public class LeftOuter_NLJoinExec extends BinaryPhysicalExec {
   // from logical plan
@@ -50,6 +52,9 @@ public class LeftOuter_NLJoinExec extends BinaryPhysicalExec {
 
   //camelia --
   private boolean foundAtLeastOneMatch;
+  private int rightNumCols;
+  private int leftNumCols;
+  private static final Log LOG = LogFactory.getLog(LeftOuter_NLJoinExec.class);
   //-- camelia
 
   public LeftOuter_NLJoinExec(TaskAttemptContext context, JoinNode plan, PhysicalExec outer,
@@ -73,6 +78,9 @@ public class LeftOuter_NLJoinExec extends BinaryPhysicalExec {
 
     //camelia --
     foundAtLeastOneMatch = false;
+    leftNumCols = outer.getSchema().getColumnNum();
+    rightNumCols = inner.getSchema().getColumnNum();
+    LOG.info("******** leftNumCols=" + leftNumCols + " rightNumCols=" + rightNumCols + "\n");
     //-- camelia
   }
 
@@ -116,11 +124,12 @@ public class LeftOuter_NLJoinExec extends BinaryPhysicalExec {
         // the scan of the right operand is finished with no matches found
         if(foundAtLeastOneMatch == false){
            //output a tuple with the nulls padded rightTuple
-           Tuple nullPaddedTuple = createNullPaddedTuple(100); //TODO ?whatsize?
+           Tuple nullPaddedTuple = createNullPaddedTuple(rightNumCols); 
            frameTuple.set(outerTuple, nullPaddedTuple);
            projector.eval(evalContexts, frameTuple);
            projector.terminate(evalContexts, outTuple);
            // we simulate we found a match, which is exactly the null padded one
+           LOG.info("******** a result null padded tuple =" + outTuple.toString() + "\n");
            foundAtLeastOneMatch = true;
            return outTuple;
         }
@@ -140,6 +149,7 @@ public class LeftOuter_NLJoinExec extends BinaryPhysicalExec {
           projector.terminate(evalContexts, outTuple);
           //camelia --
           foundAtLeastOneMatch = true;
+          LOG.info("******** a result matched padded tuple =" + outTuple.toString() + "\n");
           //-- camelia
           return outTuple;
         }

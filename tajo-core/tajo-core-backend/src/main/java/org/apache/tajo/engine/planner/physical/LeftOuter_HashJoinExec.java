@@ -33,9 +33,11 @@ import org.apache.tajo.storage.VTuple;
 import java.io.IOException;
 import java.util.*;
 import org.apache.tajo.datum.*;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 
-public class FullOuter_HashJoinExec extends BinaryPhysicalExec {
+public class LeftOuter_HashJoinExec extends BinaryPhysicalExec {
   // from logical plan
   protected JoinNode plan;
   protected EvalNode joinQual;
@@ -65,10 +67,10 @@ public class FullOuter_HashJoinExec extends BinaryPhysicalExec {
   //camelia --
   private int rightNumCols;
   private int leftNumCols;
-  private Map<Tuple, Boolean> matched; 
+  private static final Log LOG = LogFactory.getLog(LeftOuter_HashJoinExec.class);
   //-- camelia
 
-  public FullOuter_HashJoinExec(TaskAttemptContext context, JoinNode plan, PhysicalExec outer,
+  public LeftOuter_HashJoinExec(TaskAttemptContext context, JoinNode plan, PhysicalExec outer,
       PhysicalExec inner) {
     super(context, SchemaUtil.merge(outer.getSchema(), inner.getSchema()),
         plan.getOutSchema(), outer, inner);
@@ -76,11 +78,6 @@ public class FullOuter_HashJoinExec extends BinaryPhysicalExec {
     this.joinQual = plan.getJoinQual();
     this.qualCtx = joinQual.newContext();
     this.tupleSlots = new HashMap<Tuple, List<Tuple>>(10000);
-
-    //camelia --
-    //this hashmap mirrors the evolution of the tupleSlots, with the same keys. For each join key, we have a boolean flag, initially false (whether this join key had at least one match on the left operand)
-    this.matched = new HashMap<Tuple, Boolean>(10000);
-    //-- camelia
 
     this.joinKeyPairs = PlannerUtil.getJoinKeyPairs(joinQual,
         outer.getSchema(), inner.getSchema());
@@ -108,6 +105,7 @@ public class FullOuter_HashJoinExec extends BinaryPhysicalExec {
     //camelia --
     leftNumCols = outer.getSchema().getColumnNum();
     rightNumCols = inner.getSchema().getColumnNum();
+    LOG.info("******** leftNumCols=" + leftNumCols + " rightNumCols=" + rightNumCols + "\n");
     //-- camelia
 
   }
@@ -129,36 +127,36 @@ public class FullOuter_HashJoinExec extends BinaryPhysicalExec {
      return aTuple;
 
   }
-  
-  public Tuple getNextUnmatchedRight() {
-     
-     List<Tuple> newValue;
-     Tuple returnedTuple;
-     //get a keyTUple from the matched hashmap with a boolean false value
-     for(Tuple aKeyTuple : matched.keySet()) {
-        if(matched.get(aKeyTuple) == false) {
-          newValue = tupleSlots.get(aKeyTuple); 
-          returnedTuple = newValue.remove(0);
-          tupleSlots.put(aKeyTuple, newValue);
-     
-          //after taking the last element from the list in tupleSlots, set flag true in matched as well
-          if(newValue.isEmpty()){
-             matched.put(aKeyTuple, true);
-          }
 
-          return returnedTuple; 
+  //prints the content of tupleSlots
+  public void printBuildHashTable(){
+     LOG.info("******** THE HASH TABLE: \n");
+     List<Tuple> hashedTuples;
+
+     for(Tuple aTuple : tupleSlots.keySet()) {
+        String s = "" + aTuple.toString() + "| [";
+        hashedTuples = tupleSlots.get(aTuple);
+        for (int i = 0; i < hashedTuples.size(); i++) {
+           s = s + " (" + hashedTuples.get(i).toString() + ") ;;";
         }
-     }
-     return null;
-         
-    
+        s = s + "] \n";
+        LOG.info(s);
+      }
+
+        
+   
+
   }
   //-- camelia
+
 
   public Tuple next() throws IOException {
     if (first) {
       loadRightToHashTable();
     }
+    //camelia --
+    printBuildHashTable();
+    //-- camelia
 
     Tuple rightTuple;
     boolean found = false;
@@ -169,23 +167,8 @@ public class FullOuter_HashJoinExec extends BinaryPhysicalExec {
         // getting new outer
         leftTuple = leftChild.next(); // it comes from a disk
         if (leftTuple == null) { // if no more tuples in left tuples on disk, a join is completed.
-          //camelia --
-          // in this stage we can begin outputing tuples from the right operand (which were before in tupleSlots) null padded on the left side
-          Tuple unmatchedRightTuple = getNextUnmatchedRight();
-          if( unmatchedRightTuple == null) {
-             finished = true;
-             return null;
-          }
-          else {
-             Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols); 
-             frameTuple.set(nullPaddedTuple, unmatchedRightTuple);
-             projector.eval(evalContexts, frameTuple);
-             projector.terminate(evalContexts, outTuple);
-            
-             return outTuple;         
-          }
-          //-- camelia
-          
+          finished = true;
+          return null;
         }
 
         // getting corresponding right
@@ -204,6 +187,7 @@ public class FullOuter_HashJoinExec extends BinaryPhysicalExec {
            projector.terminate(evalContexts, outTuple);
            // we simulate we found a match, which is exactly the null padded one
            shouldGetLeftTuple = true;
+           LOG.info("******** a result null padded tuple =" + outTuple.toString() + "\n");
            return outTuple;         
 
           //-- camelia
@@ -214,15 +198,12 @@ public class FullOuter_HashJoinExec extends BinaryPhysicalExec {
       // getting a next right tuple on in-memory hash table.
       rightTuple = iterator.next();
       frameTuple.set(leftTuple, rightTuple); // evaluate a join condition on both tuples
-      joinQual.eval(qualCtx, inSchema, frameTuple); //?? isn't it always true if hash function is identity function??
+      joinQual.eval(qualCtx, inSchema, frameTuple);
       if (joinQual.terminate(qualCtx).asBool()) { // if both tuples are joinable
         projector.eval(evalContexts, frameTuple);
         projector.terminate(evalContexts, outTuple);
         found = true;
-        //camelia --
-        getKeyLeftTuple(leftTuple, leftKeyTuple);
-        matched.put(leftKeyTuple, true);
-        //-- camelia
+        LOG.info("******** a result matched padded tuple =" + outTuple.toString() + "\n");
       }
 
       if (!iterator.hasNext()) { // no more right tuples for this hash key
@@ -256,9 +237,6 @@ public class FullOuter_HashJoinExec extends BinaryPhysicalExec {
         newValue = new ArrayList<Tuple>();
         newValue.add(tuple);
         tupleSlots.put(keyTuple, newValue);
-        //camelia --
-        matched.put(keyTuple,false);
-        //-- camelia
       }
     }
     first = false;
