@@ -260,8 +260,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
         boolean hashJoin = false;
         if (outerSize < threshold || innerSize < threshold) {
           hashJoin = true;
-        }
-
+        }        
         if (hashJoin) {
           PhysicalExec selectedOuter;
           PhysicalExec selectedInner;
