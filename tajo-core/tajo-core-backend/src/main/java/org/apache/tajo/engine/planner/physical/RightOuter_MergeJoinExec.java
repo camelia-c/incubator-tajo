@@ -133,6 +133,7 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
  
   public Tuple next() throws IOException {
     Tuple previous;
+    boolean endInPopulationStage = false;
 
     for (;;) {
             
@@ -160,6 +161,10 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
              // we simulate we found a match, which is exactly the null padded one           
              LOG.info("********in the end a result null padded tuple =" + outTuple.toString() + "\n");
              innerTuple = rightChild.next();
+             if(innerTuple != null)
+              LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+             else
+              LOG.info("********rightChild.next() = NULL\n");
              return outTuple;  
  
             }
@@ -243,7 +248,7 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
     
 
      if(end == false) {
-
+           endInPopulationStage = false;
            previous = new VTuple(outerTuple);
            do {
              outerTupleSlots.add(new VTuple(outerTuple));
@@ -255,6 +260,7 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
 
              if (outerTuple == null) {
                end = true;
+               endInPopulationStage = true;
                break;
              }
              
@@ -274,6 +280,7 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
              
              if (innerTuple == null) {
                end = true;
+               endInPopulationStage = true;
                break;
              }
                           
@@ -281,10 +288,10 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
            posInnerTupleSlots = 0;
            LOG.info("_________finished populating tuple slots lists in one round ___________");
          } // if end false
-       }//if
+       }//if newround
        
          
-       if(end == false){
+       if((end == false) && (endInPopulationStage == false)){
          outerNext = new VTuple (outerTupleSlots.get(posOuterTupleSlots));  
          
          if((posInnerTupleSlots == innerTupleSlots.size())&&(posOuterTupleSlots != (outerTupleSlots.size()-1))){
