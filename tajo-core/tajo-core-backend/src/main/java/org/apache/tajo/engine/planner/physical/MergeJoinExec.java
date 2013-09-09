@@ -36,6 +36,9 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 public class MergeJoinExec extends BinaryPhysicalExec {
   // from logical plan
   private JoinNode joinNode;
@@ -64,6 +67,10 @@ public class MergeJoinExec extends BinaryPhysicalExec {
   // projection
   private final Projector projector;
   private final EvalContext [] evalContexts;
+
+  //camelia --
+  private static final Log LOG = LogFactory.getLog(MergeJoinExec.class);
+  //-- camelia
 
   public MergeJoinExec(TaskAttemptContext context, JoinNode plan, PhysicalExec outer,
       PhysicalExec inner, SortSpec[] outerSortKey, SortSpec[] innerSortKey) {
@@ -111,9 +118,21 @@ public class MergeJoinExec extends BinaryPhysicalExec {
 
         if(outerTuple == null){
           outerTuple = leftChild.next();
+           //camelia --
+           if( outerTuple != null)
+              LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+           else
+              LOG.info("********leftChild.next() = null \n");
+           //-- camelia
         }
         if(innerTuple == null){
           innerTuple = rightChild.next();
+          //camelia --
+           if(innerTuple != null)
+              LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+           else
+              LOG.info("********rightChild.next() = NULL\n");
+          //-- camelia
         }
 
         outerTupleSlots.clear();
@@ -123,8 +142,20 @@ public class MergeJoinExec extends BinaryPhysicalExec {
         while ((cmp = joincomparator.compare(outerTuple, innerTuple)) != 0) {
           if (cmp > 0) {
             innerTuple = rightChild.next();
+            //camelia --
+            if(innerTuple != null)
+              LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+            else
+              LOG.info("********rightChild.next() = NULL\n");
+           //-- camelia
           } else if (cmp < 0) {
             outerTuple = leftChild.next();
+            //camelia --
+            if( outerTuple != null)
+              LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+            else
+              LOG.info("********leftChild.next() = null \n");
+            //-- camelia
           }
           if (innerTuple == null || outerTuple == null) {
             return null;
@@ -135,6 +166,15 @@ public class MergeJoinExec extends BinaryPhysicalExec {
         do {
           outerTupleSlots.add(outerTuple);
           outerTuple = leftChild.next();
+
+          //camelia --
+            if( outerTuple != null)
+              LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+            else
+              LOG.info("********leftChild.next() = null \n");
+           //-- camelia
+
+
           if (outerTuple == null) {
             end = true;
             break;
@@ -147,6 +187,14 @@ public class MergeJoinExec extends BinaryPhysicalExec {
         do {
           innerTupleSlots.add(innerTuple);
           innerTuple = rightChild.next();
+
+           //camelia --
+            if(innerTuple != null)
+              LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+            else
+              LOG.info("********rightChild.next() = NULL\n");
+           //-- camelia
+
           if (innerTuple == null) {
             end = true;
             break;
@@ -165,6 +213,7 @@ public class MergeJoinExec extends BinaryPhysicalExec {
       if (joinQual.terminate(qualCtx).asBool()) {
         projector.eval(evalContexts, frameTuple);
         projector.terminate(evalContexts, outTuple);
+        LOG.info("============ result :" + outTuple.toString() + "\n");
         return outTuple;
       }
     }
