@@ -36,7 +36,11 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-//THIS IS A STUB YET
+import org.apache.tajo.datum.*;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+
 public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
   // from logical plan
   private JoinNode joinNode;
@@ -52,8 +56,6 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
 
   private final List<Tuple> outerTupleSlots;
   private final List<Tuple> innerTupleSlots;
-  private Iterator<Tuple> outerIterator;
-  private Iterator<Tuple> innerIterator;
 
   private JoinTupleComparator joincomparator = null;
   private TupleComparator[] tupleComparator = null;
@@ -65,6 +67,16 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
   // projection
   private final Projector projector;
   private final EvalContext [] evalContexts;
+
+  //camelia --
+  private int rightNumCols;
+  private int leftNumCols;
+  private static final Log LOG = LogFactory.getLog(FullOuter_MergeJoinExec.class);
+  private int posInnerTupleSlots = -1;
+  private int posOuterTupleSlots = -1;
+  //-- camelia
+
+
 
   public FullOuter_MergeJoinExec(TaskAttemptContext context, JoinNode plan, PhysicalExec outer,
       PhysicalExec inner, SortSpec[] outerSortKey, SortSpec[] innerSortKey) {
@@ -85,8 +97,6 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
         inner.getSchema(), sortSpecs);
     this.tupleComparator = PlannerUtil.getComparatorsFromJoinQual(
         plan.getJoinQual(), outer.getSchema(), inner.getSchema());
-    this.outerIterator = outerTupleSlots.iterator();
-    this.innerIterator = innerTupleSlots.iterator();
     
     // for projection
     this.projector = new Projector(inSchema, outSchema, plan.getTargets());
@@ -95,93 +105,276 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
     // for join
     frameTuple = new FrameTuple();
     outTuple = new VTuple(outSchema.getColumnNum());
+
+
+    //camelia --
+    leftNumCols = outer.getSchema().getColumnNum();
+    rightNumCols = inner.getSchema().getColumnNum();
+    //-- camelia
+
+
+
   }
 
   public JoinNode getPlan(){
     return this.joinNode;
   }
 
+  //camelia --
+  //creates a tuple of a given size filled with NULL values in all fields
+  public Tuple createNullPaddedTuple(int columnNum){
+     VTuple aTuple = new VTuple(columnNum);
+     int i;
+     for(i = 0; i < columnNum; i++){
+        aTuple.put(i, DatumFactory.createNullDatum());
+     } 
+     return aTuple;
+
+  }
+  
+ 
   public Tuple next() throws IOException {
     Tuple previous;
+    boolean endInPopulationStage = false;
 
     for (;;) {
-      if (!outerIterator.hasNext() && !innerIterator.hasNext()) {
-        if(end){
-          return null;
-        }
+            
+      boolean newround = false;
+      if((posInnerTupleSlots == -1) && (posOuterTupleSlots == -1))
+         newround = true;
+      if ((posInnerTupleSlots == innerTupleSlots.size()) && (posOuterTupleSlots == outerTupleSlots.size()))
+         newround = true; 
 
-        if(outerTuple == null){
-          outerTuple = leftChild.next();
-        }
-        if(innerTuple == null){
-          innerTuple = rightChild.next();
-        }
+      if(newround == true){
+        LOG.info("should start a new round \n");
+        if(end){
+           
+           
+           //before exit,  a leftnullpadded tuple should be built for all remaining right side and a  rightnullpadded tuple should be built for all remaining left side 
+           
+           LOG.info(" end is trrue");
+           if((innerTuple == null) && (outerTuple == null)) {  
+              return null;
+           }
+
+           if((innerTuple != null) && (outerTuple == null)){
+              //output a tuple with the nulls padded leftTuple
+             Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols); 
+             frameTuple.set(nullPaddedTuple, innerTuple);
+             projector.eval(evalContexts, frameTuple);
+             projector.terminate(evalContexts, outTuple);
+             // we simulate we found a match, which is exactly the null padded one           
+             LOG.info("********in the end a result null padded tuple =" + outTuple.toString() + "\n");
+             innerTuple = rightChild.next();
+             if(innerTuple != null)
+              LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+             else
+              LOG.info("********rightChild.next() = NULL\n");
+             return outTuple;  
+ 
+            }
+
+            if((innerTuple == null) && (outerTuple != null)){
+              //output a tuple with the nulls padded leftTuple
+             Tuple nullPaddedTuple = createNullPaddedTuple(rightNumCols); 
+             frameTuple.set(outerTuple, nullPaddedTuple);
+             projector.eval(evalContexts, frameTuple);
+             projector.terminate(evalContexts, outTuple);
+             // we simulate we found a match, which is exactly the null padded one           
+             LOG.info("********in the end a result null padded tuple =" + outTuple.toString() + "\n");
+             outerTuple = leftChild.next();
+             if( outerTuple != null)
+                  LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+             else
+                  LOG.info("********leftChild.next() = null \n");
+
+             return outTuple;  
+ 
+            }
+            
+          
+         }//if end
+
+         if(outerTuple == null){
+           outerTuple = leftChild.next();
+           if( outerTuple != null)
+              LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+           else
+              LOG.info("********leftChild.next() = null \n");
+         }
+         if(innerTuple == null){
+           innerTuple = rightChild.next();
+           if(innerTuple != null)
+              LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+           else
+              LOG.info("********rightChild.next() = NULL\n");
+          
+         }
 
         outerTupleSlots.clear();
         innerTupleSlots.clear();
+        posInnerTupleSlots = -1;
+        posOuterTupleSlots = -1;
+        
 
         int cmp;
         while ((cmp = joincomparator.compare(outerTuple, innerTuple)) != 0) {
+          
           if (cmp > 0) {
-            //camelia --
-            //
-
-            //-- camelia
+                        
+            //before getting a new tuple from the right,  a leftnullpadded tuple should be built
+            //output a tuple with the nulls padded leftTuple
+            Tuple nullPaddedTuple = createNullPaddedTuple(leftNumCols); 
+            frameTuple.set(nullPaddedTuple, innerTuple);
+            projector.eval(evalContexts, frameTuple);
+            projector.terminate(evalContexts, outTuple);
+            // we simulate we found a match, which is exactly the null padded one           
+            LOG.info("******** a result null padded tuple =" + outTuple.toString() + "\n");
+            // BEFORE RETURN, MOVE FORWARD
             innerTuple = rightChild.next();
-          } else if (cmp < 0) {
-            outerTuple = leftChild.next();
-          }
-          if (innerTuple == null || outerTuple == null) {
-            return null;
-          }
-        }
+            if(innerTuple != null)
+               LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+            else
+                LOG.info("********rightChild.next() = NULL\n");
 
-        previous = outerTuple;
-        do {
-          outerTupleSlots.add(outerTuple);
-          outerTuple = leftChild.next();
-          if (outerTuple == null) {
-            end = true;
-            break;
-          }
-        } while (tupleComparator[0].compare(previous, outerTuple) == 0);
-        outerIterator = outerTupleSlots.iterator();
-        outerNext = outerIterator.next();
+            if (innerTuple == null){
+               end = true;
+            }
 
-        previous = innerTuple;
-        do {
-          innerTupleSlots.add(innerTuple);
-          innerTuple = rightChild.next();
+            return outTuple;  
+ 
+            
+            
+           } else if (cmp < 0) {
+
+               //before getting a new tuple from the left,  a rightnullpadded tuple should be built
+               //output a tuple with the nulls padded rightTuple
+               Tuple nullPaddedTuple = createNullPaddedTuple(rightNumCols); 
+               frameTuple.set(outerTuple, nullPaddedTuple);
+               projector.eval(evalContexts, frameTuple);
+               projector.terminate(evalContexts, outTuple);
+               // we simulate we found a match, which is exactly the null padded one           
+               LOG.info("******** a result null padded tuple =" + outTuple.toString() + "\n");
+               // BEFORE RETURN, MOVE FORWARD
+               outerTuple = leftChild.next();
+               if( outerTuple != null)
+                  LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+               else
+                  LOG.info("********leftChild.next() = null \n");
+
+               if (outerTuple == null){
+                  end = true;
+               }
+
+               return outTuple;  
+
+           }//cmp<0
+          
+          
           if (innerTuple == null) {
-            end = true;
-            break;
+              end = true;
+             //in original algorithm we had return null , but now we need to continue the end processing phase for remaining unprocessed right tuples
+              break;
           }
-        } while (tupleComparator[1].compare(previous, innerTuple) == 0);
-        innerIterator = innerTupleSlots.iterator();
-      }
 
-      if(!innerIterator.hasNext()){
-        outerNext = outerIterator.next();
-        innerIterator = innerTupleSlots.iterator();
-      }
+          if (outerTuple == null) {             
+             end = true;
+             //in original algorithm we had return null , but now we need to continue the end processing phase for remaining unprocessed right tuples
+             break;
+          }
+        
 
-      frameTuple.set(outerNext, innerIterator.next());
-      joinQual.eval(qualCtx, inSchema, frameTuple);
-      if (joinQual.terminate(qualCtx).asBool()) {
-        projector.eval(evalContexts, frameTuple);
-        projector.terminate(evalContexts, outTuple);
-        return outTuple;
-      }
-    }
+      }//while
+
+    
+
+     if(end == false) {
+           endInPopulationStage = false;
+           previous = new VTuple(outerTuple);
+           do {
+             outerTupleSlots.add(new VTuple(outerTuple));
+             outerTuple = leftChild.next();
+             if( outerTuple != null)
+                LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+             else
+                LOG.info("********leftChild.next() = null \n");
+
+             if (outerTuple == null) {
+               end = true;
+               endInPopulationStage = true;
+               break;
+             }
+             
+           } while (tupleComparator[0].compare(previous, outerTuple) == 0);
+           posOuterTupleSlots = 0;
+           
+
+           previous = new VTuple(innerTuple);
+           do {
+             innerTupleSlots.add(new VTuple(innerTuple));
+             innerTuple = rightChild.next();
+             if(innerTuple != null)
+               LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+             else
+                LOG.info("********rightChild.next() = NULL\n");
+
+             
+             if (innerTuple == null) {
+               end = true;
+               endInPopulationStage = true;
+               break;
+             }
+                          
+           } while (tupleComparator[1].compare(previous, innerTuple) == 0);
+           posInnerTupleSlots = 0;
+           LOG.info("_________finished populating tuple slots lists in one round ___________");
+         } // if end false
+       }//if newround
+       
+         
+       if((end == false) && (endInPopulationStage == false)){
+         outerNext = new VTuple (outerTupleSlots.get(posOuterTupleSlots));  
+         
+         if((posInnerTupleSlots == innerTupleSlots.size())&&(posOuterTupleSlots != (outerTupleSlots.size()-1))){
+           posOuterTupleSlots = posOuterTupleSlots + 1;
+           outerNext = new VTuple(outerTupleSlots.get(posOuterTupleSlots)); 
+           posInnerTupleSlots = 0;
+           
+         }
+         
+
+         if((posInnerTupleSlots == innerTupleSlots.size())&&(posOuterTupleSlots == (outerTupleSlots.size()-1))){
+           // a new round with new tuples is needed
+           posOuterTupleSlots = posOuterTupleSlots + 1;
+           continue;
+         }
+
+
+         Tuple aTuple = new VTuple(innerTupleSlots.get(posInnerTupleSlots));
+         posInnerTupleSlots = posInnerTupleSlots + 1;
+         
+
+         frameTuple.set(outerNext, aTuple);
+         joinQual.eval(qualCtx, inSchema, frameTuple);
+         projector.eval(evalContexts, frameTuple);
+         projector.terminate(evalContexts, outTuple);
+         LOG.info("============ result :" + outTuple.toString() + "\n");
+         return outTuple;
+        
+       }//the second if end false
+
+    }//for
   }
+
 
   @Override
   public void rescan() throws IOException {
     super.rescan();
     outerTupleSlots.clear();
     innerTupleSlots.clear();
-    outerIterator = outerTupleSlots.iterator();
-    innerIterator = innerTupleSlots.iterator();
+    posInnerTupleSlots = -1;
+    posOuterTupleSlots = -1;
   }
-}
 
+  //-- camelia
+}
