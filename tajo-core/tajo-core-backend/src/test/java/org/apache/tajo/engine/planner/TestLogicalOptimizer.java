@@ -33,6 +33,8 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import org.apache.tajo.algebra.JoinType;
+
 import static org.junit.Assert.*;
 
 public class TestLogicalOptimizer {
@@ -86,6 +88,107 @@ public class TestLogicalOptimizer {
         CatalogUtil.newDataTypesWithoutLen(Type.INT4));
 
     catalog.registerFunction(funcDesc);
+
+    //camelia --
+    /*
+    create external table reg1 (reg_id int, reg_name text) using csv with ('csvfile.delimiter'=',') location 'file:/home/camelia/tajo_git/date_test/REG1';
+    */
+    Schema schema14 = new Schema();
+    schema14.addColumn("reg_id", Type.INT4);
+    schema14.addColumn("reg_name", Type.TEXT);
+
+    TableDesc region2 = new TableDescImpl("region2", schema14, StoreType.CSV,
+        new Options(),
+        new Path("file:///"));
+    catalog.addTable(region2);
+
+
+    /*
+    create external table country1 (country_id int, country_name text, reg_id int) using csv with ('csvfile.delimiter'=',') location 'file:/home/camelia/tajo_git/date_test/COUNTRY1';
+    */
+    Schema schema15 = new Schema();
+    schema15.addColumn("country_id", Type.INT4);
+    schema15.addColumn("country_name", Type.TEXT);
+    schema15.addColumn("reg_id", Type.INT4);
+
+    TableDesc country2 = new TableDescImpl("country2", schema15, StoreType.CSV,
+        new Options(),
+        new Path("file:///"));
+    catalog.addTable(country2);
+
+
+    /*
+    create external table loc1 (id int, city text, country_id int) using csv with ('csvfile.delimiter'=',') location 'file:/home/camelia/tajo_git/date_test/LOC1';
+    */
+    Schema schema16 = new Schema();
+    schema16.addColumn("id", Type.INT4);
+    schema16.addColumn("city", Type.TEXT);
+    schema16.addColumn("country_id", Type.INT4);
+
+    TableDesc loc2 = new TableDescImpl("loc2", schema16, StoreType.CSV,
+        new Options(),
+        new Path("file:///"));
+    catalog.addTable(loc2);
+
+    /*
+    create external table shop1 (shop_id int, shop_name text, loc_id int) using csv with ('csvfile.delimiter'=',') location 'file:/home/camelia/tajo_git/date_test/SHOP1';
+    */
+    Schema schema17 = new Schema();
+    schema17.addColumn("shop_id", Type.INT4);
+    schema17.addColumn("shop_name", Type.TEXT);
+    schema17.addColumn("loc_id", Type.INT4);
+
+    TableDesc shop2 = new TableDescImpl("shop2", schema17, StoreType.CSV,
+        new Options(),
+        new Path("file:///"));
+    catalog.addTable(shop2);
+
+
+
+    /*
+    create external table dep1 (dep_id int, dep_name text, loc_id int) using csv with ('csvfile.delimiter'=',') location 'file:/home/camelia/tajo_git/date_test/DEP1';
+    */
+    Schema schema18 = new Schema();
+    schema18.addColumn("dep_id", Type.INT4);
+    schema18.addColumn("dep_name", Type.TEXT);
+    schema18.addColumn("loc_id", Type.INT4);
+
+    TableDesc dep2 = new TableDescImpl("dep2", schema18, StoreType.CSV,
+        new Options(),
+        new Path("file:///"));
+    catalog.addTable(dep2);
+
+
+    /*
+    create external table job1 (job_id int, job_title text) using csv with ('csvfile.delimiter'=',') location 'file:/home/camelia/tajo_git/date_test/JOB1';
+    */
+    Schema schema19 = new Schema();
+    schema19.addColumn("job_id", Type.INT4);
+    schema19.addColumn("job_title", Type.TEXT);
+
+    TableDesc job2 = new TableDescImpl("job2", schema19, StoreType.CSV,
+        new Options(),
+        new Path("file:///"));
+    catalog.addTable(job2);
+
+    /*
+    create external table emp1 (emp_id int, first_name text, last_name text, dep_id int, salary float, job_id int) using csv with ('csvfile.delimiter'=',') location 'file:/home/camelia/tajo_git/date_test/EMP1';
+    */
+    Schema schema20 = new Schema();
+    schema20.addColumn("emp_id", Type.INT4);
+    schema20.addColumn("first_name", Type.TEXT);
+    schema20.addColumn("last_name", Type.TEXT);
+    schema20.addColumn("dep_id", Type.INT4);
+    schema20.addColumn("salary", Type.FLOAT4);
+    schema20.addColumn("job_id", Type.INT4);
+
+    TableDesc emp2 = new TableDescImpl("emp2", schema20, StoreType.CSV,
+        new Options(),
+        new Path("file:///"));
+    catalog.addTable(emp2);
+
+    //--camelia
+
     sqlAnalyzer = new SQLAnalyzer();
     planner = new LogicalPlanner(catalog);
     optimizer = new LogicalOptimizer();
@@ -102,8 +205,618 @@ public class TestLogicalOptimizer {
     "select name from employee where empId = 100", // 2
     "select name, max(empId) as final from employee where empId > 50 group by name", // 3
     "select name, score from employee natural join score", // 4
-    "select name, score from employee join score on employee.deptName = score.deptName", // 5
+    "select name, score from employee join score on employee.deptName = score.deptName", // 5      
   };
+
+  //camelia--
+  static String[] OUTERJOINQUERIES = {
+     "select city , dep_name , salary  from  loc2 left outer join dep2 on loc2.id=dep2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id", // 0 multinullsupplier0
+     "select city , dep_name , salary  from  country2 left outer join loc2 on country2.country_id=loc2.country_id left outer join dep2 on loc2.id=dep2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id", //1 multinullsupplier1
+    "select city , dep_name , shop_name  from  loc2 right outer join dep2 on loc2.id=dep2.loc_id right outer join shop2 on loc2.id=shop2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id", //2 multinullsupplier2
+    "select city , dep_name , salary  from  country2 left outer join loc2 on country2.country_id=loc2.country_id left outer join dep2 on loc2.id=dep2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id left outer join shop2 on loc2.id=shop2.loc_id", //3 multinullsupplier3
+    "select dep_name, salary from dep2 left outer join emp2 on dep2.dep_id=emp2.dep_id where emp2.salary > 100",//4 restrictednullsupplier0
+    "select dep_name, salary from dep2 left outer join emp2 on dep2.dep_id=emp2.dep_id where dep2.loc_id < 500",//5 restrictednullsupplier1
+    "select dep_name, salary from dep2 right outer join emp2 on dep2.dep_id=emp2.dep_id where dep2.loc_id < 500",//6 restrictednullsupplier2
+    "select dep_name, salary from dep2 full outer join emp2 on dep2.dep_id=emp2.dep_id where emp2.salary > 100",//7 restrictednullsupplier3
+    "select dep_name, salary from dep2 full outer join emp2 on dep2.dep_id=emp2.dep_id where dep2.loc_id < 500",//8 restrictednullsupplier4
+    "select dep_name, salary from dep2 full outer join emp2 on dep2.dep_id=emp2.dep_id where dep2.loc_id < 500 and emp2.salary > 100",//9 restrictednullsupplier5
+    "select city , dep_name , salary  from  loc2 left outer join dep2 on loc2.id=dep2.loc_id left outer join emp2 on emp2.dep_id=dep2.dep_id where dep2.loc_id < 500", //10 restrictednullsupplier6
+     "select city , dep_name , salary  from  country2 right outer join loc2 on country2.country_id=loc2.country_id right outer join dep2 on loc2.id=dep2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id right outer join job2 on emp2.job_id=job2.job_id where country2.country_id>10", //11 restrictednullsupplier7
+    "select city , dep_name , salary  from  loc2 left outer join dep2 on loc2.id=dep2.loc_id left outer join emp2 on emp2.dep_id=dep2.dep_id join job2 on emp2.job_id=job2.job_id", //12 restrictednullsupplier8
+    "select city , dep_name , salary  from  country2 left outer join loc2 on country2.country_id=loc2.country_id left outer join dep2 on loc2.id=dep2.loc_id , emp2 where emp2.dep_id=dep2.dep_id", //13 restrictednullsupplier9   
+    "select city , dep_name , salary  from  country2 left outer join loc2 on country2.country_id=loc2.country_id left outer join dep2 on loc2.id=dep2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id left outer join shop2 on loc2.id=shop2.loc_id where shop2.shop_id>10" ,//14 combined1
+    "select city , dep_name , shop_name  from  loc2 right outer join dep2 on loc2.id=dep2.loc_id right outer join shop2 on loc2.id=shop2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id right outer join job2 on emp2.job_id=job2.job_id where emp2.emp_id>10",  //15 combined2
+    "select city , dep_name , salary  from  loc2 left outer join dep2 on loc2.id=dep2.loc_id full outer join emp2 on emp2.dep_id=dep2.dep_id left outer join job2 on emp2.job_id=job2.job_id where job2.job_id > 10", //16 combined3 
+  };
+
+  //////////////////// multi null suppliers \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+  @Test
+  public final void testMultiNullSupplier0() throws PlanningException, CloneNotSupportedException {
+   /* "select city , dep_name , salary  from  loc2 left outer join dep2 on loc2.id=dep2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id"  */
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[0]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.JOIN, projNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) projNode.getChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode.getJoinType());          //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    JoinNode joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode2.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.SCAN, joinNode2.getLeftChild().getType()); //SHOULD BE LOC2
+    
+    
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) projNode.getChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode.getJoinType());          //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode2.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.SCAN, joinNode2.getLeftChild().getType()); //SHOULD BE LOC2
+  }
+
+
+  @Test
+  public final void testMultiNullSupplier1() throws PlanningException, CloneNotSupportedException {
+     /*"select city , dep_name , salary  from  country2 left outer join loc2 on country2.country_id=loc2.country_id left outer join dep2 on loc2.id=dep2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id"*/
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[1]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.JOIN, projNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) projNode.getChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode.getJoinType());          //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    JoinNode joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode2.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    JoinNode joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode3.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE LOC2
+    assertEquals(NodeType.SCAN, joinNode3.getLeftChild().getType()); //SHOULD BE COUNTRY2
+    
+    
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode.getJoinType());          //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode2.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode3.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE LOC2
+    assertEquals(NodeType.SCAN, joinNode3.getLeftChild().getType()); //SHOULD BE COUNTRY2
+  }
+
+  @Test
+  public final void testMultiNullSupplier2() throws PlanningException, CloneNotSupportedException {
+     /*"select city , dep_name , shop_name  from  loc2 right outer join dep2 on loc2.id=dep2.loc_id right outer join shop2 on loc2.id=shop2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id"*/
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[2]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.JOIN, projNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) projNode.getChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode.getJoinType());          //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    JoinNode joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode2.getJoinType()); //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE SHOP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    JoinNode joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode3.getJoinType()); //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.SCAN, joinNode3.getLeftChild().getType()); //SHOULD BE LOC2
+    
+    
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode.getJoinType());          //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode2.getJoinType()); //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE SHOP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode3.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.SCAN, joinNode3.getLeftChild().getType()); //SHOULD BE LOC2
+  }
+  
+  @Test
+  public final void testMultiNullSupplier3() throws PlanningException, CloneNotSupportedException {
+   /*
+    "select city , dep_name , salary  from  country2 left outer join loc2 on country2.country_id=loc2.country_id left outer join dep2 on loc2.id=dep2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id left outer join shop2 on loc2.id=shop2.loc_id"
+   */
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[3]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.JOIN, projNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) projNode.getChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode.getJoinType());          //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE SHOP2
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    JoinNode joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode2.getJoinType()); //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    JoinNode joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode3.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE DEP2
+    JoinNode joinNode4 = (JoinNode) joinNode3.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode4.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode4.getRightChild().getType()); //SHOULD BE LOC2
+    assertEquals(NodeType.SCAN, joinNode4.getLeftChild().getType()); //SHOULD BE COUNTRY2
+    
+    
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode.getJoinType());          //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE SHOP2
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode2.getJoinType()); //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode3.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE DEP2
+    joinNode4 = (JoinNode) joinNode3.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode4.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode4.getRightChild().getType()); //SHOULD BE LOC2
+    assertEquals(NodeType.SCAN, joinNode4.getLeftChild().getType()); //SHOULD BE COUNTRY2
+   
+  }
+
+  //////////////////// restricted null supplier SELECTION-BASED \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+  
+  @Test
+  public final void testRestrictedNullSupplier0() throws PlanningException, CloneNotSupportedException {
+  /*  "select dep_name, salary from dep2 left outer join emp2 on dep2.dep_id=emp2.dep_id where emp2.salary > 100"*/ 
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[4]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
+    SelectionNode selNode = (SelectionNode) projNode.getChild();
+    assertEquals(NodeType.JOIN, selNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) selNode.getChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode.getJoinType());          //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.INNER, joinNode.getJoinType());          //INNER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+
+
+  }
+
+  @Test
+  public final void testRestrictedNullSupplier1() throws PlanningException, CloneNotSupportedException {
+  /*  select dep_name, salary from dep2 left outer join emp2 on dep2.dep_id=emp2.dep_id where dep2.loc_id < 500 
+   --> SHOULD REMAIN UNCHANGED*/ 
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[5]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
+    SelectionNode selNode = (SelectionNode) projNode.getChild();
+    assertEquals(NodeType.JOIN, selNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) selNode.getChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode.getJoinType());          //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+    //--> SHOULD REMAIN UNCHANGED
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode.getJoinType());          //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+
+  }
+
+  @Test
+  public final void testRestrictedNullSupplier2() throws PlanningException, CloneNotSupportedException {
+  /*select dep_name, salary from dep2 right outer join emp2 on dep2.dep_id=emp2.dep_id where dep2.loc_id < 500 */
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[6]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
+    SelectionNode selNode = (SelectionNode) projNode.getChild();
+    assertEquals(NodeType.JOIN, selNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) selNode.getChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode.getJoinType());          //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.INNER, joinNode.getJoinType());          //INNER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+  }
+
+  @Test
+  public final void testRestrictedNullSupplier3() throws PlanningException, CloneNotSupportedException {
+  /*"select dep_name, salary from dep2 full outer join emp2 on dep2.dep_id=emp2.dep_id where emp2.salary > 100" */
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[7]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
+    SelectionNode selNode = (SelectionNode) projNode.getChild();
+    assertEquals(NodeType.JOIN, selNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) selNode.getChild();
+    assertEquals(JoinType.FULL_OUTER, joinNode.getJoinType());          //FULL_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode.getJoinType());          //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+  }
+
+  @Test
+  public final void testRestrictedNullSupplier4() throws PlanningException, CloneNotSupportedException {
+    /*"select dep_name, salary from dep2 full outer join emp2 on dep2.dep_id=emp2.dep_id where dep2.loc_id < 500 "*/
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[8]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
+    SelectionNode selNode = (SelectionNode) projNode.getChild();
+    assertEquals(NodeType.JOIN, selNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) selNode.getChild();
+    assertEquals(JoinType.FULL_OUTER, joinNode.getJoinType());          //FULL_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode.getJoinType());          //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+    
+  }
+
+  @Test
+  public final void testRestrictedNullSupplier5() throws PlanningException, CloneNotSupportedException {
+    /*select dep_name, salary from dep2 full outer join emp2 on dep2.dep_id=emp2.dep_id where dep2.loc_id < 500 and emp2.salary > 100*/
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[9]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
+    SelectionNode selNode = (SelectionNode) projNode.getChild();
+    assertEquals(NodeType.JOIN, selNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) selNode.getChild();
+    assertEquals(JoinType.FULL_OUTER, joinNode.getJoinType());          //FULL_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.INNER, joinNode.getJoinType());          //INNER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.SCAN, joinNode.getLeftChild().getType()); //SHOULD BE DEP2
+  }
+  
+  @Test
+  public final void testRestrictedNullSupplier6() throws PlanningException, CloneNotSupportedException {
+    /*select city , dep_name , salary  from  loc2 left outer join dep2 on loc2.id=dep2.loc_id left outer join emp2 on emp2.dep_id=dep2.dep_id where dep2.loc_id < 500*/
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[10]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
+    SelectionNode selNode = (SelectionNode) projNode.getChild();
+    assertEquals(NodeType.JOIN, selNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) selNode.getChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode.getJoinType());          //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2    
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    JoinNode joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode2.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.SCAN, joinNode2.getLeftChild().getType()); //SHOULD BE LOC2
+
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode.getJoinType());          //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2    
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode2.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.SCAN, joinNode2.getLeftChild().getType()); //SHOULD BE LOC2
+
+  }
+
+  @Test
+  public final void testRestrictedNullSupplier7() throws PlanningException, CloneNotSupportedException {
+  
+    /*"select city , dep_name , salary  from  country2 right outer join loc2 on country2.country_id=loc2.country_id right outer join dep2 on loc2.id=dep2.loc_id right outer join emp2 on emp2.dep_id=dep2.dep_id right outer join job2 on emp2.job_id=job2.job_id where country2.country_id>10", */
+
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[11]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
+    SelectionNode selNode = (SelectionNode) projNode.getChild();
+    assertEquals(NodeType.JOIN, selNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) selNode.getChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode.getJoinType());          //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE JOB2    
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    JoinNode joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode2.getJoinType()); //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    JoinNode joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode3.getJoinType()); //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.JOIN, joinNode3.getLeftChild().getType());
+    JoinNode joinNode4 = (JoinNode) joinNode3.getLeftChild();
+    assertEquals(JoinType.RIGHT_OUTER, joinNode4.getJoinType()); //RIGHT_OUTER
+    assertEquals(NodeType.SCAN, joinNode4.getRightChild().getType()); //SHOULD BE LOC2
+    assertEquals(NodeType.SCAN, joinNode4.getLeftChild().getType()); //SHOULD BE COUNTRY2
+
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) root.getChild();
+    assertEquals(JoinType.INNER, joinNode.getJoinType());          //INNER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE JOB2    
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode2.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode3.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.JOIN, joinNode3.getLeftChild().getType());
+    joinNode4 = (JoinNode) joinNode3.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode4.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode4.getRightChild().getType()); //SHOULD BE LOC2
+    assertEquals(NodeType.SCAN, joinNode4.getLeftChild().getType()); //SHOULD BE COUNTRY2
+
+  }
+
+  //////////////////// restricted null supplier INNER JOIN-BASED \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+  
+  @Test
+  public final void testRestrictedNullSupplier8() throws PlanningException, CloneNotSupportedException {
+  
+    /*select city , dep_name , salary  from  loc2 left outer join dep2 on loc2.id=dep2.loc_id left outer join emp2 on emp2.dep_id=dep2.dep_id join job2 on emp2.job_id=job2.job_id*/
+
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[12]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.JOIN, projNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) projNode.getChild();
+    assertEquals(JoinType.INNER, joinNode.getJoinType());          //INNER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE JOB2    
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    JoinNode joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode2.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    JoinNode joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode3.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.SCAN, joinNode3.getLeftChild().getType()); //SHOULD BE LOC2
+
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) projNode.getChild();
+    assertEquals(JoinType.INNER, joinNode.getJoinType());          //INNER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE JOB2    
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode2.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE EMP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode3.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.SCAN, joinNode3.getLeftChild().getType()); //SHOULD BE LOC2
+
+  }
+
+  @Test
+  public final void testRestrictedNullSupplier9() throws PlanningException, CloneNotSupportedException {
+    /* select city , dep_name , salary  from  country2 left outer join loc2 on country2.country_id=loc2.country_id left outer join dep2 on loc2.id=dep2.loc_id , emp2 where emp2.dep_id=dep2.dep_id */
+
+    Expr expr = sqlAnalyzer.parse(OUTERJOINQUERIES[13]);
+    LogicalPlan newPlan = planner.createPlan(expr);
+    LogicalNode plan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, plan.getType());
+    LogicalRootNode root = (LogicalRootNode) plan;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.PROJECTION, root.getChild().getType());
+    ProjectionNode projNode = (ProjectionNode) root.getChild();
+    assertEquals(NodeType.SELECTION, projNode.getChild().getType());
+    SelectionNode selNode = (SelectionNode) projNode.getChild();
+    assertEquals(NodeType.JOIN, selNode.getChild().getType());
+    JoinNode joinNode = (JoinNode) selNode.getChild();
+    assertEquals(JoinType.CROSS, joinNode.getJoinType());          //CROSS
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2    
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    JoinNode joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode2.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    JoinNode joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.LEFT_OUTER, joinNode3.getJoinType()); //LEFT_OUTER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE LOC2
+    assertEquals(NodeType.SCAN, joinNode3.getLeftChild().getType()); //SHOULD BE COUNTRY2
+
+
+    LogicalNode optimized = optimizer.optimize(newPlan);
+
+    assertEquals(NodeType.ROOT, optimized.getType());
+    root = (LogicalRootNode) optimized;
+    TestLogicalNode.testCloneLogicalNode(root);
+    assertEquals(NodeType.JOIN, root.getChild().getType());
+    joinNode = (JoinNode) projNode.getChild();
+    assertEquals(JoinType.INNER, joinNode.getJoinType());          //INNER
+    assertEquals(NodeType.SCAN, joinNode.getRightChild().getType()); //SHOULD BE EMP2    
+    assertEquals(NodeType.JOIN, joinNode.getLeftChild().getType());
+    joinNode2 = (JoinNode) joinNode.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode2.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode2.getRightChild().getType()); //SHOULD BE DEP2
+    assertEquals(NodeType.JOIN, joinNode2.getLeftChild().getType());
+    joinNode3 = (JoinNode) joinNode2.getLeftChild();
+    assertEquals(JoinType.INNER, joinNode3.getJoinType()); //INNER
+    assertEquals(NodeType.SCAN, joinNode3.getRightChild().getType()); //SHOULD BE LOC2
+    assertEquals(NodeType.SCAN, joinNode3.getLeftChild().getType()); //SHOULD BE COUNTRY2
+
+  }
+  
+  ///////////////////////////// combined with multinullsupplier and restrictednullsupplier \\\\\\\\\\\\\\\\\\\
+  //TODO TEST FOR 14,15,16  
+
+
+
+  //--camelia
   
   @Test
   public final void testProjectionPushWithNaturalJoin() throws PlanningException, CloneNotSupportedException {

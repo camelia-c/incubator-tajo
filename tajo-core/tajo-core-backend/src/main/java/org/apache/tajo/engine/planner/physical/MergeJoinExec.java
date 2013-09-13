@@ -162,45 +162,49 @@ public class MergeJoinExec extends BinaryPhysicalExec {
           }
         }
 
-        previous = outerTuple;
-        do {
-          outerTupleSlots.add(outerTuple);
-          outerTuple = leftChild.next();
 
-          //camelia --
-            if( outerTuple != null)
-              LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
-            else
-              LOG.info("********leftChild.next() = null \n");
-           //-- camelia
+       try {
+           previous = outerTuple.clone();
+           do {
+             outerTupleSlots.add(outerTuple.clone());
+             outerTuple = leftChild.next();
+
+             //camelia --
+               if( outerTuple != null)
+                 LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+               else
+                 LOG.info("********leftChild.next() = null \n");
+              //-- camelia
 
 
-          if (outerTuple == null) {
-            end = true;
-            break;
-          }
-        } while (tupleComparator[0].compare(previous, outerTuple) == 0);
-        outerIterator = outerTupleSlots.iterator();
-        outerNext = outerIterator.next();
+             if (outerTuple == null) {
+               end = true;
+               break;
+             }
+           } while (tupleComparator[0].compare(previous, outerTuple) == 0);
+           outerIterator = outerTupleSlots.iterator();
+           outerNext = outerIterator.next();
 
-        previous = innerTuple;
-        do {
-          innerTupleSlots.add(innerTuple);
-          innerTuple = rightChild.next();
+           previous = innerTuple.clone();
+           do {
+             innerTupleSlots.add(innerTuple.clone());
+             innerTuple = rightChild.next();
 
-           //camelia --
-            if(innerTuple != null)
-              LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
-            else
-              LOG.info("********rightChild.next() = NULL\n");
-           //-- camelia
+              //camelia --
+               if(innerTuple != null)
+                 LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+               else
+                 LOG.info("********rightChild.next() = NULL\n");
+              //-- camelia
 
-          if (innerTuple == null) {
-            end = true;
-            break;
-          }
-        } while (tupleComparator[1].compare(previous, innerTuple) == 0);
-        innerIterator = innerTupleSlots.iterator();
+             if (innerTuple == null) {
+               end = true;
+               break;
+             }
+           } while (tupleComparator[1].compare(previous, innerTuple) == 0);
+           innerIterator = innerTupleSlots.iterator();
+         }catch (CloneNotSupportedException e) {
+         }
       }
 
       if(!innerIterator.hasNext()){

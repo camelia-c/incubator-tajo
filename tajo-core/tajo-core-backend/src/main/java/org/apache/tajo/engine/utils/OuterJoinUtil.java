@@ -37,6 +37,10 @@ public class OuterJoinUtil{
     allTables = new HashMap<String,HashMap<String,TableOuterJoined>>();
   }
 
+  public static void resetOuterJoinUtil(){
+    oju = new OuterJoinUtil();
+  }
+
   public static OuterJoinUtil getOuterJoinUtil(){
     if( oju == null) {
        oju = new OuterJoinUtil();

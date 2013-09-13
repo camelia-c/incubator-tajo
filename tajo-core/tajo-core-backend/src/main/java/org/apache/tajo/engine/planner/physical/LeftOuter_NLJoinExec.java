@@ -105,6 +105,11 @@ public class LeftOuter_NLJoinExec extends BinaryPhysicalExec {
     for (;;) {
       if (needNewOuter) {
         outerTuple = leftChild.next();
+        if( outerTuple != null)
+           LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+        else
+           LOG.info("********leftChild.next() = null \n");        
+
         if (outerTuple == null) {
           return null;
         }
@@ -117,6 +122,12 @@ public class LeftOuter_NLJoinExec extends BinaryPhysicalExec {
       }
 
       innerTuple = rightChild.next();
+      if(innerTuple != null)
+         LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+      else
+         LOG.info("********rightChild.next() = NULL\n");
+
+
       if (innerTuple == null) {
 
 
@@ -131,13 +142,18 @@ public class LeftOuter_NLJoinExec extends BinaryPhysicalExec {
            // we simulate we found a match, which is exactly the null padded one
            LOG.info("******** a result null padded tuple =" + outTuple.toString() + "\n");
            foundAtLeastOneMatch = true;
+           needNewOuter = true;
+           rightChild.rescan();
            return outTuple;
+        }
+        else {
+           needNewOuter = true;
+           rightChild.rescan();
+           continue;
+
         }
         //-- camelia
 
-        needNewOuter = true;
-        rightChild.rescan();
-        continue;
       }
 
       frameTuple.set(outerTuple, innerTuple);

@@ -50,6 +50,7 @@ import org.apache.tajo.master.querymaster.QueryJobManager;
 import org.apache.tajo.storage.StorageManager;
 import org.apache.tajo.storage.StorageUtil;
 import org.apache.tajo.engine.planner.OuterJoinMetadata;
+import org.apache.tajo.engine.utils.OuterJoinUtil;
 import org.apache.tajo.engine.planner.logical.NodeType;
 
 
@@ -73,6 +74,7 @@ public class GlobalEngine extends AbstractService {
   private LogicalPlanner planner;
   private LogicalOptimizer optimizer;
   private DistributedQueryHookManager hookManager;
+
 
   public GlobalEngine(final MasterContext context) {
     super(GlobalEngine.class.getName());
@@ -209,6 +211,8 @@ public class GlobalEngine extends AbstractService {
     }
  
     //camelia --
+    //reset outerjoinutil
+    OuterJoinUtil.resetOuterJoinUtil();
     LOG.info("optimized LogicalPlan:\n" + plan.getRootBlock().getRoot());
     //-- camelia
 

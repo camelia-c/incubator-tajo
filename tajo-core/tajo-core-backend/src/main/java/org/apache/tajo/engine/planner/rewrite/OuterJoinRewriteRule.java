@@ -87,6 +87,7 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
     JoinNode joinNode = (JoinNode) PlannerUtil.findTopNode(root, NodeType.JOIN);
 
     Stack<LogicalNode> stack = new Stack<LogicalNode>();
+    oju2 = OuterJoinUtil.getOuterJoinUtil();
 
     //for each queryBlock, check whether it contains at least one outer join
     //if so, perform rewriting within that query block 1) RewriteMultiNullSupplier and then 2)RewriteNullRestricted 
