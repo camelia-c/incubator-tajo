@@ -161,13 +161,13 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
          String [] innerLineage4 = PlannerUtil.getLineage(joinNode.getRightChild());
          long innerSize4 = estimateSizeRecursive(ctx, innerLineage4);
          
-         /*if (innerSize4 < threshold) {
+         if (innerSize4 < threshold) {
            // we can implement left outer join using hash join, using the right operand as the build relation
                     
            LOG.info("For left outer join ==> The planner chooses [modified Hash Join]");
            return new LeftOuter_HashJoinExec(ctx, joinNode, outer, inner);
          }
-         else */{
+         else {
            //the right operand is too large, so we opt for NL implementation of left outer join
            LOG.info("For left outer join ==> The planner chooses [modified Nested Loop Join]");
            return new LeftOuter_NLJoinExec(ctx, joinNode, outer, inner);
@@ -178,12 +178,12 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
          //if the left operand is small enough => implement it as a left outer hash join with exchanged operators (note: blocking, but merge join is blocking as well)
          String [] outerLineage4 = PlannerUtil.getLineage(joinNode.getLeftChild());
          long outerSize4 = estimateSizeRecursive(ctx, outerLineage4);
-         /*if (outerSize4 < threshold){
+         if (outerSize4 < threshold){
             LOG.info("For right outer join ==> The planner chooses [modified Hash Join]");
            return new LeftOuter_HashJoinExec(ctx, joinNode, inner, outer);
 
          }
-         else*/ {
+         else {
 
             //the left operand is too large, so opt for merge join implementation
             LOG.info("For right outer join ==> The planner chooses [modified Merge Join]");
@@ -214,7 +214,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
            hashJoin2 = true;
          }
 
-         /*if (hashJoin2) {
+         if (hashJoin2) {
            PhysicalExec selectedOuter2;
            PhysicalExec selectedInner2;
 
@@ -229,7 +229,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
            LOG.info("For full outer join ==> The planner chooses [modified Hash Join]");
            return new FullOuter_HashJoinExec(ctx, joinNode, selectedOuter2, selectedInner2);
          }
-         else*/ {
+         else {
              //if size too large, full outer merge join implementation 
              LOG.info("For large full outer join ==> The planner chooses [modified Merge Join]");
              SortSpec[][] sortSpecs3 = PlannerUtil.getSortKeysFromJoinQual(
@@ -261,7 +261,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
         if (outerSize < threshold || innerSize < threshold) {
           hashJoin = true;
         }        
-        /*if (hashJoin) {
+        if (hashJoin) {
           PhysicalExec selectedOuter;
           PhysicalExec selectedInner;
 
@@ -276,7 +276,7 @@ public class PhysicalPlannerImpl implements PhysicalPlanner {
 
           LOG.info("The planner chooses [InMemory Hash Join]");
           return new HashJoinExec(ctx, joinNode, selectedOuter, selectedInner);
-        }*/
+        }
 
       default:
         SortSpec[][] sortSpecs = PlannerUtil.getSortKeysFromJoinQual(
