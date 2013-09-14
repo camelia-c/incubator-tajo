@@ -122,10 +122,12 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
 	       //it is the right operand in a full outer join
 	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).countFull++;
 	       oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).isNullSupplying = true;
+               oju2.getTheTable(currentBlockName, ((ScanNode)right). getTableId()).countNullSupplying++;
 	       
 	       //based on the join condition, put info for its left operand as well
 	       oju2.getTheTable(currentBlockName, leftexprname).countFull++;  
-	       oju2.getTheTable(currentBlockName, leftexprname).isNullSupplying = true;     
+	       oju2.getTheTable(currentBlockName, leftexprname).isNullSupplying = true; 
+               oju2.getTheTable(currentBlockName, leftexprname).countNullSupplying++;    
 	  } 
 	  else if(joinType == JoinType.RIGHT_OUTER){
 	       //it is the right operand in a right outer join

@@ -126,7 +126,7 @@ public class TestLeftOuter_HashJoinExec {
     Appender appender2 = StorageManager.getAppender(conf, job3Meta, job3Path);
     appender2.init();
     Tuple tuple2 = new VTuple(job3Meta.getSchema().getColumnNum());
-    for (int i = 0; i < 3; i++) {
+    for (int i = 1; i < 4; i++) {
       int x = 100 + i;
       tuple2.put(new Datum[] { DatumFactory.createInt4(100 + i),
                     DatumFactory.createText("job_" + x) });
@@ -226,7 +226,7 @@ public class TestLeftOuter_HashJoinExec {
 
     Fragment[] merged = TUtil.concat(dep3Frags, emp3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_HashJoinExec");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_HashJoinExec0");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr expr = analyzer.parse(QUERIES[0]);
@@ -237,12 +237,9 @@ public class TestLeftOuter_HashJoinExec {
 
     ProjectionExec proj = (ProjectionExec) exec;
     if (proj.getChild() instanceof LeftOuter_NLJoinExec) {
-      //to think about how to transform from Nested Loops into HashJoin
-      //HashJoinExec hashjoin = new HashJoinExec(ctx, join.getPlan(), scanout, scanin);
-      //proj.setChild(hashjoin);
-
-      //exec = proj;
-      assertEquals(1, 1);
+       //for this small data set this is not likely to happen
+      
+      assertEquals(1, 0);
     }
     else{
        Tuple tuple;
@@ -269,7 +266,7 @@ public class TestLeftOuter_HashJoinExec {
 
     Fragment[] merged = TUtil.concat(job3Frags, emp3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_HashJoinExec");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_HashJoinExec1");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr expr = analyzer.parse(QUERIES[1]);
@@ -280,12 +277,9 @@ public class TestLeftOuter_HashJoinExec {
 
     ProjectionExec proj = (ProjectionExec) exec;
     if (proj.getChild() instanceof LeftOuter_NLJoinExec) {
-      //to think about how to transform from Nested Loops into HashJoin
-      //HashJoinExec hashjoin = new HashJoinExec(ctx, join.getPlan(), scanout, scanin);
-      //proj.setChild(hashjoin);
-
-      //exec = proj;
-      assertEquals(1, 1);
+       //for this small data set this is not likely to happen
+      
+      assertEquals(1, 0);
     }
     else{
        Tuple tuple;
@@ -312,7 +306,7 @@ public class TestLeftOuter_HashJoinExec {
 
     Fragment[] merged = TUtil.concat(emp3Frags, job3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_HashJoinExec");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_HashJoinExec2");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr expr = analyzer.parse(QUERIES[2]);
@@ -323,12 +317,9 @@ public class TestLeftOuter_HashJoinExec {
 
     ProjectionExec proj = (ProjectionExec) exec;
     if (proj.getChild() instanceof LeftOuter_NLJoinExec) {
-      //to think about how to transform from Nested Loops into HashJoin
-      //HashJoinExec hashjoin = new HashJoinExec(ctx, join.getPlan(), scanout, scanin);
-      //proj.setChild(hashjoin);
-
-      //exec = proj;
-      assertEquals(1, 1);
+      //for this small data set this is not likely to happen
+      
+      assertEquals(1, 0);
     }
     else{
        Tuple tuple;

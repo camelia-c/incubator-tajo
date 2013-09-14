@@ -163,6 +163,7 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
             a = tablesStack.peek();
             if(oju2.allTables.get(aBlock).get(a).countNullSupplying > 0){
                //isLastOuterJoin=true;
+               LOG.info("this null restricted table is also null supplying");
                visitChild(plan, plan.getBlock(aBlock).getRoot(), stack, 0); //start from the root LogicalNode of the aBlock at depth 0
             }
          
@@ -270,7 +271,7 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
     }//function multinullsupplier
     else if(currentFunction.equals("RewriteNullRestricted") == true) {
        String oneTable = tablesStack.peek(); //don't remove it until reaching all leaves
-
+       LOG.info("in visitChild in tablesStack, oneTable= " + oneTable);
        if (joinNode.hasJoinQual())
              if((joinNode.getJoinQual().getRightExpr().getType() == EvalType.FIELD)&&(joinNode.getJoinQual().getLeftExpr().getType() == EvalType.FIELD)){
                 String rightexprname = ((FieldEval) joinNode.getJoinQual().getRightExpr()).getTableId();
@@ -279,7 +280,7 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
                 String b = null;
 
                 JoinType joinType = joinNode.getJoinType();
-                LOG.info("***** IN RewriteMultiNullSupplier join has type: " + joinType.toString() + " left node type:" + left.getType().toString() + "   and right node type:" + right.getType().toString()); 
+                LOG.info("***** IN RewriteRestrictedNullSupplier join has type: " + joinType.toString() + " left node type:" + left.getType().toString() + "   and right node type:" + right.getType().toString()); 
           
                 
                 // traverse logical plan tree  and for each join of type outer join where oneTable is null supplying, change the type of join accordingly. When the join is converted to inner join, the other operand table is pushed into the stack.
@@ -287,13 +288,14 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
          
                 //if this join involves oneTable and it's at a level higher than the level where oneTable begins to be restricted:
                 if(((rightexprname.equals(oneTable) == true)||(leftexprname.equals(oneTable) == true)) && (depth >= oju2.getTheTable(currentBlockName, oneTable).depthRestricted)){
-         
+                   LOG.info("at least one tableId is the oneTable");
                    if(((ScanNode)right).getTableId().equals(oneTable) == true){
+                        LOG.info("oneTable is on the right");
                         /*oneTable is on the right side of this join. Cases are:   
                         1)  SELECT ... FROM   X  type JOIN oneTable ON  X.col1=oneTable.col2   
                         2)  SELECT ... FROM   X  type JOIN oneTable ON  oneTable.col2=X.col1  */  
                         // if jointype is  INNER or RIGHT_OUTER => no optimization 
-                        // if jointype is FULL_OUTER => do not transform
+                        // if jointype is FULL_OUTER => RIGHT_OUTER  [do not transform]
                         if(joinType == JoinType.LEFT_OUTER){
                            //this means that oneTable is a null supplier in this join => change join type to INNER ; decrement the countNullSUpplying in allTables for oneTable; if not already processed push the other operand in the stack
                            joinNode.setJoinType(JoinType.INNER);
@@ -314,7 +316,17 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
                              LOG.info("====> pushed " + otherTable + " on stack \n");
                           }
                        
-                      }//left outer                     
+                      }//left outer  
+                      else if(joinType == JoinType.FULL_OUTER){         
+                          
+                           joinNode.setJoinType(JoinType.RIGHT_OUTER);
+                           oju2.getTheTable(currentBlockName, oneTable).countNullSupplying--;
+
+                         
+                          LOG.info("######### Transforming FULL_OUTER to RIGHT_OUTER join between " + oneTable + " and " + otherTable + "\n");                          
+
+
+                      }//FULL OUTER          
                  }//oneTable is on the right
                  else {
                     /*oneTable is on the left side of this join. Cases are:   
@@ -323,6 +335,8 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
                      3)  SELECT ... FROM   Y ... JOIN oneTable ON COND    type JOIN X ON  X.col1=oneTable.col2
                      4)  SELECT ... FROM   Y ... JOIN oneTable ON COND    type JOIN X ON  oneTable.col2=X.col1*/  
                     //if jointype is INNER or LEFT_OUTER join => no optimization
+                    // FULL_OUTER => LEFT_OUTER
+                    LOG.info("oneTable is on the left");
                     if(joinType == JoinType.RIGHT_OUTER){
                        //this means that oneTable is a null supplier in this join =>  change join type to INNER ; decrement the countNullSUpplying in allTables for oneTable; if not already processed push the other operand in the stack
                        LOG.info("######### Transforming RIGHT_OUTER to INNER join between " + oneTable + " and " + ((ScanNode)right).getTableId() + "\n");
@@ -339,7 +353,16 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
                           LOG.info("====> pushed "+((ScanNode)right).getTableId()+" on stack \n");
                        }
              
-                    }//right outer  
+                    }//right outer 
+                    else if(joinType == JoinType.FULL_OUTER){  
+                       joinNode.setJoinType(JoinType.LEFT_OUTER);
+                       oju2.getTheTable(currentBlockName, oneTable).countNullSupplying--;
+
+                         
+                       LOG.info("######### Transforming FULL_OUTER to LEFT_OUTER join between " + oneTable + " and " + otherTable + "\n");                          
+
+
+                    }// FULL OUTER
                   }//oneTable is on the left side      
          }//involves oneTable
 

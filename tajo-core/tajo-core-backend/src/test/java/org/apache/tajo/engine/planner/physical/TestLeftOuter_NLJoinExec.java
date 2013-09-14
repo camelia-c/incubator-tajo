@@ -56,8 +56,9 @@ public class TestLeftOuter_NLJoinExec {
   private StorageManager sm;
   private Path testDir;
 
-  private TableDesc employee;
-  private TableDesc people;
+  private TableDesc dep3;
+  private TableDesc job3;
+  private TableDesc emp3;
 
   @Before
   public void setUp() throws Exception {
@@ -122,7 +123,7 @@ public class TestLeftOuter_NLJoinExec {
     Appender appender2 = StorageManager.getAppender(conf, job3Meta, job3Path);
     appender2.init();
     Tuple tuple2 = new VTuple(job3Meta.getSchema().getColumnNum());
-    for (int i = 0; i < 3; i++) {
+    for (int i = 1; i < 4; i++) {
       int x = 100 + i;
       tuple2.put(new Datum[] { DatumFactory.createInt4(100 + i),
                     DatumFactory.createText("job_" + x) });
@@ -225,7 +226,7 @@ public class TestLeftOuter_NLJoinExec {
 
     Fragment[] merged = TUtil.concat(dep3Frags, emp3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_NLJoinExec");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_NLJoinExec0");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr context =  analyzer.parse(QUERIES[0]);
@@ -234,7 +235,17 @@ public class TestLeftOuter_NLJoinExec {
 
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
     PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
-    
+
+    //maybe plan results with hash join exec algorithm usage. Must convert from LeftOuter_HashJoinExec into LeftOuter_NLJoinExec
+    ProjectionExec proj = (ProjectionExec) exec;
+    if (proj.getChild() instanceof LeftOuter_HashJoinExec) { 
+      LeftOuter_HashJoinExec join = (LeftOuter_HashJoinExec) proj.getChild();
+      LeftOuter_NLJoinExec aJoin = new LeftOuter_NLJoinExec(ctx, join.getPlan(), join.getLeftChild(), join.getRightChild());
+      proj.setChild(aJoin);
+      exec = proj;
+     
+    }
+
     Tuple tuple;
     int i = 1;
     int count = 0;
@@ -251,7 +262,7 @@ public class TestLeftOuter_NLJoinExec {
 
   @Test
   public final void testLeftOuter_NLJoinExec1() throws IOException, PlanningException {
-    FFragment[] job3Frags = StorageManager.splitNG(conf, "job3", job3.getMeta(), job3.getPath(),
+    Fragment[] job3Frags = StorageManager.splitNG(conf, "job3", job3.getMeta(), job3.getPath(),
         Integer.MAX_VALUE);
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
         Integer.MAX_VALUE);
@@ -259,7 +270,7 @@ public class TestLeftOuter_NLJoinExec {
     Fragment[] merged = TUtil.concat(job3Frags, emp3Frags);
 
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_NLJoinExec");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_NLJoinExec1");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr context =  analyzer.parse(QUERIES[1]);
@@ -269,6 +280,17 @@ public class TestLeftOuter_NLJoinExec {
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
     PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
     
+    //maybe plan results with hash join exec algorithm usage. Must convert from LeftOuter_HashJoinExec into LeftOuter_NLJoinExec
+    ProjectionExec proj = (ProjectionExec) exec;
+    if (proj.getChild() instanceof LeftOuter_HashJoinExec) { 
+      LeftOuter_HashJoinExec join = (LeftOuter_HashJoinExec) proj.getChild();
+      LeftOuter_NLJoinExec aJoin = new LeftOuter_NLJoinExec(ctx, join.getPlan(), join.getLeftChild(), join.getRightChild());
+      proj.setChild(aJoin);
+      exec = proj;
+     
+    }
+
+
     Tuple tuple;
     int i = 1;
     int count = 0;
@@ -291,7 +313,7 @@ public class TestLeftOuter_NLJoinExec {
 
     Fragment[] merged = TUtil.concat(emp3Frags, job3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_NLJoinExec");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_NLJoinExec2");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr context =  analyzer.parse(QUERIES[2]);
@@ -301,6 +323,17 @@ public class TestLeftOuter_NLJoinExec {
     PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
     PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
     
+    //maybe plan results with hash join exec algorithm usage. Must convert from LeftOuter_HashJoinExec into LeftOuter_NLJoinExec
+    ProjectionExec proj = (ProjectionExec) exec;
+    if (proj.getChild() instanceof LeftOuter_HashJoinExec) { 
+      LeftOuter_HashJoinExec join = (LeftOuter_HashJoinExec) proj.getChild();
+      LeftOuter_NLJoinExec aJoin = new LeftOuter_NLJoinExec(ctx, join.getPlan(), join.getLeftChild(), join.getRightChild());
+      proj.setChild(aJoin);
+      exec = proj;
+     
+    }
+
+
     Tuple tuple;
     int i = 1;
     int count = 0;

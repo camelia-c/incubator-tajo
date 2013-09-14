@@ -126,7 +126,7 @@ public class TestFullOuter_HashJoinExec {
     Appender appender2 = StorageManager.getAppender(conf, job3Meta, job3Path);
     appender2.init();
     Tuple tuple2 = new VTuple(job3Meta.getSchema().getColumnNum());
-    for (int i = 0; i < 3; i++) {
+    for (int i = 1; i < 4; i++) {
       int x = 100 + i;
       tuple2.put(new Datum[] { DatumFactory.createInt4(100 + i),
                     DatumFactory.createText("job_" + x) });
@@ -212,9 +212,9 @@ public class TestFullOuter_HashJoinExec {
   }
 
   String[] QUERIES = {
-      "select dep3.dep_id, dep_name, emp_id, salary from dep3 left outer join emp3 on dep3.dep_id = emp3.dep_id", //0 no nulls
-      "select job3.job_id, job_title, emp_id, salary from job3 left outer join emp3 on job3.job_id=emp3.job_id", //1 nulls on the right operand
-      "select job3.job_id, job_title, emp_id, salary from emp3 left outer join job3 on job3.job_id=emp3.job_id" //2 nulls on the left side
+      "select dep3.dep_id, dep_name, emp_id, salary from dep3 full outer join emp3 on dep3.dep_id = emp3.dep_id", //0 no nulls
+      "select job3.job_id, job_title, emp_id, salary from job3 full outer join emp3 on job3.job_id=emp3.job_id", //1 nulls on the right operand
+      "select job3.job_id, job_title, emp_id, salary from emp3 full outer join job3 on job3.job_id=emp3.job_id" //2 nulls on the left side
   };
 
   @Test
@@ -226,7 +226,7 @@ public class TestFullOuter_HashJoinExec {
 
     Fragment[] merged = TUtil.concat(dep3Frags, emp3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestFullOuter_HashJoinExec");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestFullOuter_HashJoinExec0");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr expr = analyzer.parse(QUERIES[0]);
@@ -236,27 +236,33 @@ public class TestFullOuter_HashJoinExec {
     PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
 
     ProjectionExec proj = (ProjectionExec) exec;
-    if (proj.getChild() instanceof LeftOuter_NLJoinExec) {
-      //to think about how to transform from Nested Loops into HashJoin
-      //HashJoinExec hashjoin = new HashJoinExec(ctx, join.getPlan(), scanout, scanin);
-      //proj.setChild(hashjoin);
+    if (proj.getChild() instanceof FullOuter_MergeJoinExec) {
+      FullOuter_MergeJoinExec join = (FullOuter_MergeJoinExec) proj.getChild();
+      ExternalSortExec sortout = (ExternalSortExec) join.getLeftChild();
+      ExternalSortExec sortin = (ExternalSortExec) join.getRightChild();
+      SeqScanExec scanout = (SeqScanExec) sortout.getChild();
+      SeqScanExec scanin = (SeqScanExec) sortin.getChild();
 
-      //exec = proj;
-      assertEquals(1, 1);
+      FullOuter_HashJoinExec hashjoin = new FullOuter_HashJoinExec(ctx, join.getPlan(), scanout, scanin);
+      
+      proj.setChild(hashjoin);
+
+      exec = proj;
+     
     }
-    else{
-       Tuple tuple;
-       int count = 0;
-       int i = 1;
-       exec.init();
+    
+    Tuple tuple;
+    int count = 0;
+    int i = 1;
+    exec.init();
   
-       while ((tuple = exec.next()) != null) {
-         //TODO check contents
-         count = count + 1;
-       }
-       exec.close();
-       assertEquals(12, count);
+    while ((tuple = exec.next()) != null) {
+      //TODO check contents
+      count = count + 1;
     }
+    exec.close();
+    assertEquals(12, count);
+    
   }
 
 
@@ -269,7 +275,7 @@ public class TestFullOuter_HashJoinExec {
 
     Fragment[] merged = TUtil.concat(job3Frags, emp3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestFullOuter_HashJoinExec");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestFullOuter_HashJoinExec1");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr expr = analyzer.parse(QUERIES[1]);
@@ -279,27 +285,33 @@ public class TestFullOuter_HashJoinExec {
     PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
 
     ProjectionExec proj = (ProjectionExec) exec;
-    if (proj.getChild() instanceof LeftOuter_NLJoinExec) {
-      //to think about how to transform from Nested Loops into HashJoin
-      //HashJoinExec hashjoin = new HashJoinExec(ctx, join.getPlan(), scanout, scanin);
-      //proj.setChild(hashjoin);
+    if (proj.getChild() instanceof FullOuter_MergeJoinExec) {
+      FullOuter_MergeJoinExec join = (FullOuter_MergeJoinExec) proj.getChild();
+      ExternalSortExec sortout = (ExternalSortExec) join.getLeftChild();
+      ExternalSortExec sortin = (ExternalSortExec) join.getRightChild();
+      SeqScanExec scanout = (SeqScanExec) sortout.getChild();
+      SeqScanExec scanin = (SeqScanExec) sortin.getChild();
 
-      //exec = proj;
-      assertEquals(1, 1);
+      FullOuter_HashJoinExec hashjoin = new FullOuter_HashJoinExec(ctx, join.getPlan(), scanout, scanin);
+      
+      proj.setChild(hashjoin);
+
+      exec = proj;
+     
     }
-    else{
-       Tuple tuple;
-       int count = 0;
-       int i = 1;
-       exec.init();
+    
+    Tuple tuple;
+    int count = 0;
+    int i = 1;
+    exec.init();
   
-       while ((tuple = exec.next()) != null) {
-         //TODO check contents
-         count = count + 1;
-       }
-       exec.close();
-       assertEquals(8, count);
+    while ((tuple = exec.next()) != null) {
+      //TODO check contents
+      count = count + 1;
     }
+    exec.close();
+    assertEquals(8, count);
+    
   }
 
     @Test
@@ -312,7 +324,7 @@ public class TestFullOuter_HashJoinExec {
 
     Fragment[] merged = TUtil.concat(emp3Frags, job3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestFullOuter_HashJoinExec");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestFullOuter_HashJoinExec2");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr expr = analyzer.parse(QUERIES[2]);
@@ -322,27 +334,33 @@ public class TestFullOuter_HashJoinExec {
     PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
 
     ProjectionExec proj = (ProjectionExec) exec;
-    if (proj.getChild() instanceof LeftOuter_NLJoinExec) {
-      //to think about how to transform from Nested Loops into HashJoin
-      //HashJoinExec hashjoin = new HashJoinExec(ctx, join.getPlan(), scanout, scanin);
-      //proj.setChild(hashjoin);
+    if (proj.getChild() instanceof FullOuter_MergeJoinExec) {
+      FullOuter_MergeJoinExec join = (FullOuter_MergeJoinExec) proj.getChild();
+      ExternalSortExec sortout = (ExternalSortExec) join.getLeftChild();
+      ExternalSortExec sortin = (ExternalSortExec) join.getRightChild();
+      SeqScanExec scanout = (SeqScanExec) sortout.getChild();
+      SeqScanExec scanin = (SeqScanExec) sortin.getChild();
 
-      //exec = proj;
-      assertEquals(1, 1);
+      FullOuter_HashJoinExec hashjoin = new FullOuter_HashJoinExec(ctx, join.getPlan(), scanout, scanin);
+      
+      proj.setChild(hashjoin);
+
+      exec = proj;
+     
     }
-    else{
-       Tuple tuple;
-       int count = 0;
-       int i = 1;
-       exec.init();
+    
+    Tuple tuple;
+    int count = 0;
+    int i = 1;
+    exec.init();
   
-       while ((tuple = exec.next()) != null) {
-         //TODO check contents
-         count = count + 1;
-       }
-       exec.close();
-       assertEquals(8, count);
+    while ((tuple = exec.next()) != null) {
+      //TODO check contents
+      count = count + 1;
     }
+    exec.close();
+    assertEquals(8, count);
+    
   }
 
 

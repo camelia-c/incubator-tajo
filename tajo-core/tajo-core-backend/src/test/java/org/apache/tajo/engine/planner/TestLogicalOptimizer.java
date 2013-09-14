@@ -31,6 +31,7 @@ import org.apache.tajo.engine.planner.logical.*;
 import org.apache.tajo.master.TajoMaster;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.After;
 import org.junit.Test;
 
 import org.apache.tajo.algebra.JoinType;
@@ -200,6 +201,11 @@ public class TestLogicalOptimizer {
   public static void tearDown() throws Exception {
     util.shutdownCatalogCluster();
   }
+
+  @After
+  public void resetOuterUtil(){
+     OuterJoinUtil.resetOuterJoinUtil();
+  }
   
   static String[] QUERIES = {
     "select name, manager from employee as e, dept as dp where e.deptName = dp.deptName", // 0
@@ -281,7 +287,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode2.getRightChild().getType()); //SHOULD BE DEP2
     assertEquals(NodeType.SCAN, ajoinNode2.getLeftChild().getType()); //SHOULD BE LOC2
 
-    OuterJoinUtil.resetOuterJoinUtil(); 
+    
 
   }
 
@@ -339,7 +345,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode3.getRightChild().getType()); //SHOULD BE LOC2
     assertEquals(NodeType.SCAN, ajoinNode3.getLeftChild().getType()); //SHOULD BE COUNTRY2
 
-    OuterJoinUtil.resetOuterJoinUtil(); 
+    
   }
 
   @Test
@@ -397,7 +403,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode3.getLeftChild().getType()); //SHOULD BE LOC2
 
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
 
   }
   
@@ -463,7 +469,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode4.getLeftChild().getType()); //SHOULD BE COUNTRY2
    
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
   }
 
   //////////////////// restricted null supplier SELECTION-BASED \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -508,7 +514,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode.getLeftChild().getType()); //SHOULD BE DEP2
 
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
   }
 
   @Test
@@ -552,7 +558,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode.getLeftChild().getType()); //SHOULD BE DEP2
 
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
 
   }
 
@@ -596,7 +602,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode.getLeftChild().getType()); //SHOULD BE DEP2
 
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
   }
 
   @Test
@@ -626,10 +632,11 @@ public class TestLogicalOptimizer {
     } catch(org.apache.tajo.engine.planner.PlanningException ex) {
       
     }
-    LogicalNode optimized = optimizer.optimize(newPlan);
+    optimizer.optimize(newPlan);
 
-    assertEquals(NodeType.ROOT, optimized.getType());
-    LogicalRootNode aroot = (LogicalRootNode) optimized;
+    LogicalNode aplan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, aplan.getType());   
+    LogicalRootNode aroot = (LogicalRootNode) aplan;
     TestLogicalNode.testCloneLogicalNode(aroot);
     assertEquals(NodeType.JOIN, aroot.getChild().getType());
     JoinNode ajoinNode = (JoinNode) aroot.getChild();
@@ -638,7 +645,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode.getLeftChild().getType()); //SHOULD BE DEP2
 
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
   }
 
   @Test
@@ -668,10 +675,11 @@ public class TestLogicalOptimizer {
     } catch(org.apache.tajo.engine.planner.PlanningException ex) {
       
     }
-    LogicalNode optimized = optimizer.optimize(newPlan);
+    optimizer.optimize(newPlan);
 
-    assertEquals(NodeType.ROOT, optimized.getType());
-    LogicalRootNode  aroot = (LogicalRootNode) optimized;
+    LogicalNode aplan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, aplan.getType());   
+    LogicalRootNode aroot = (LogicalRootNode) aplan;
     TestLogicalNode.testCloneLogicalNode(aroot);
     assertEquals(NodeType.JOIN, aroot.getChild().getType());
     JoinNode ajoinNode = (JoinNode) aroot.getChild();
@@ -680,7 +688,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode.getLeftChild().getType()); //SHOULD BE DEP2
 
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
     
   }
 
@@ -711,10 +719,11 @@ public class TestLogicalOptimizer {
     } catch(org.apache.tajo.engine.planner.PlanningException ex) {
       
     }
-    LogicalNode optimized = optimizer.optimize(newPlan);
+    optimizer.optimize(newPlan);
 
-    assertEquals(NodeType.ROOT, optimized.getType());
-    LogicalRootNode aroot = (LogicalRootNode) optimized;
+    LogicalNode aplan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, aplan.getType());   
+    LogicalRootNode aroot = (LogicalRootNode) aplan;
     TestLogicalNode.testCloneLogicalNode(aroot);
     assertEquals(NodeType.JOIN, aroot.getChild().getType());
     JoinNode ajoinNode = (JoinNode) aroot.getChild();
@@ -723,7 +732,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode.getLeftChild().getType()); //SHOULD BE DEP2
 
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
   }
   
   @Test
@@ -757,10 +766,11 @@ public class TestLogicalOptimizer {
     } catch(org.apache.tajo.engine.planner.PlanningException ex) {
       
     }
-    LogicalNode optimized = optimizer.optimize(newPlan);
+    optimizer.optimize(newPlan);
 
-    assertEquals(NodeType.ROOT, optimized.getType());
-    LogicalRootNode aroot = (LogicalRootNode) optimized;
+    LogicalNode aplan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, aplan.getType());   
+    LogicalRootNode aroot = (LogicalRootNode) aplan;
     TestLogicalNode.testCloneLogicalNode(aroot);
     assertEquals(NodeType.JOIN, aroot.getChild().getType());
     JoinNode ajoinNode = (JoinNode) aroot.getChild();
@@ -773,7 +783,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode2.getLeftChild().getType()); //SHOULD BE LOC2
 
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
   }
 
   @Test
@@ -817,10 +827,11 @@ public class TestLogicalOptimizer {
     } catch(org.apache.tajo.engine.planner.PlanningException ex) {
       
     }
-    LogicalNode optimized = optimizer.optimize(newPlan);
+    optimizer.optimize(newPlan);
 
-    assertEquals(NodeType.ROOT, optimized.getType());
-    LogicalRootNode aroot = (LogicalRootNode) optimized;
+    LogicalNode aplan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, aplan.getType());   
+    LogicalRootNode aroot = (LogicalRootNode) aplan;
     TestLogicalNode.testCloneLogicalNode(aroot);
     assertEquals(NodeType.JOIN, aroot.getChild().getType());
     JoinNode ajoinNode = (JoinNode) aroot.getChild();
@@ -841,7 +852,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode4.getLeftChild().getType()); //SHOULD BE COUNTRY2
 
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
   }
 
   //////////////////// restricted null supplier INNER JOIN-BASED \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -881,10 +892,11 @@ public class TestLogicalOptimizer {
     } catch(org.apache.tajo.engine.planner.PlanningException ex) {
       
     }
-    LogicalNode optimized = optimizer.optimize(newPlan);
+    optimizer.optimize(newPlan);
 
-    assertEquals(NodeType.ROOT, optimized.getType());
-    LogicalRootNode aroot = (LogicalRootNode) optimized;
+    LogicalNode aplan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, aplan.getType());   
+    LogicalRootNode aroot = (LogicalRootNode) aplan;
     TestLogicalNode.testCloneLogicalNode(aroot);
     assertEquals(NodeType.JOIN, aroot.getChild().getType());
     JoinNode ajoinNode = (JoinNode) aroot.getChild();
@@ -900,7 +912,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode3.getRightChild().getType()); //SHOULD BE DEP2
     assertEquals(NodeType.SCAN, ajoinNode3.getLeftChild().getType()); //SHOULD BE LOC2
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
   }
 
   @Test
@@ -939,10 +951,11 @@ public class TestLogicalOptimizer {
     } catch(org.apache.tajo.engine.planner.PlanningException ex) {
       
     }
-    LogicalNode optimized = optimizer.optimize(newPlan);
+    optimizer.optimize(newPlan);
 
-    assertEquals(NodeType.ROOT, optimized.getType());
-    LogicalRootNode aroot = (LogicalRootNode) optimized;
+    LogicalNode aplan = newPlan.getRootBlock().getRoot();
+    assertEquals(NodeType.ROOT, aplan.getType());   
+    LogicalRootNode aroot = (LogicalRootNode) aplan;
     TestLogicalNode.testCloneLogicalNode(aroot);
     assertEquals(NodeType.JOIN, aroot.getChild().getType());
     JoinNode ajoinNode = (JoinNode) aroot.getChild();
@@ -958,7 +971,7 @@ public class TestLogicalOptimizer {
     assertEquals(NodeType.SCAN, ajoinNode3.getRightChild().getType()); //SHOULD BE LOC2
     assertEquals(NodeType.SCAN, ajoinNode3.getLeftChild().getType()); //SHOULD BE COUNTRY2
     
-    OuterJoinUtil.resetOuterJoinUtil();
+    
 
   }
   
