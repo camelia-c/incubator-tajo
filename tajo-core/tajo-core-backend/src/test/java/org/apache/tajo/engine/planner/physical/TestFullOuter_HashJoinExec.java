@@ -217,7 +217,7 @@ public class TestFullOuter_HashJoinExec {
   };
 
   @Test
-  public final void testLeftOuter_HashInnerJoin0() throws IOException, PlanningException {
+  public final void testFullOuter_HashInnerJoin0() throws IOException, PlanningException {
     Fragment[] dep3Frags = StorageManager.splitNG(conf, "dep3", dep3.getMeta(), dep3.getPath(),
         Integer.MAX_VALUE);
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
@@ -259,7 +259,7 @@ public class TestFullOuter_HashJoinExec {
 
 
   @Test
-  public final void testLeftOuter_HashInnerJoin1() throws IOException, PlanningException {
+  public final void testFullOuter_HashInnerJoin1() throws IOException, PlanningException {
     Fragment[] job3Frags = StorageManager.splitNG(conf, "job3", job3.getMeta(), job3.getPath(),
         Integer.MAX_VALUE);
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
@@ -295,12 +295,12 @@ public class TestFullOuter_HashJoinExec {
          //TODO check contents
        }
        exec.close();
-       assertEquals(5, count);
+       assertEquals(8, count);
     }
   }
 
     @Test
-  public final void testLeftOuter_HashInnerJoin2() throws IOException, PlanningException {
+  public final void testFullOuter_HashInnerJoin2() throws IOException, PlanningException {
     
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
         Integer.MAX_VALUE);
@@ -337,7 +337,7 @@ public class TestFullOuter_HashJoinExec {
          //TODO check contents
        }
        exec.close();
-       assertEquals(7, count);
+       assertEquals(8, count);
     }
   }
 
