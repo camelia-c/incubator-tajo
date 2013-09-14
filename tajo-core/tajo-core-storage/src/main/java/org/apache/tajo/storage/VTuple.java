@@ -167,6 +167,11 @@ public class VTuple implements Tuple {
     return (TextDatum) values[fieldId];
   }
 
+  @Override
+  public Tuple clone() throws CloneNotSupportedException {
+    return new VTuple(this);
+  }
+
   public String toString() {
 		boolean first = true;
 		StringBuilder str = new StringBuilder();
@@ -211,3 +216,4 @@ public class VTuple implements Tuple {
 		return false;
 	}
 }
+

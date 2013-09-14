@@ -97,7 +97,7 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
           int cleft = oju2.allTables.get(aBlock).get(aTable).countLeft;
           int cright = oju2.allTables.get(aBlock).get(aTable).countRight;
           int cfull = oju2.allTables.get(aBlock).get(aTable).countFull;
-          if((cleft + cright + cfull) > 1){
+          if((cleft + cright + cfull) >= 1){
              hasOuter = true;
           }
        }
