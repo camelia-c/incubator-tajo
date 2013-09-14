@@ -115,6 +115,13 @@ public class OuterJoinRewriteRule extends BasicLogicalPlanVisitor<Integer> imple
             tablesStack.removeAllElements();
             inStackTables.clear();
          }
+
+         //ensure that the processedTables is empty
+         if(!processedTables.isEmpty()){
+            LOG.info("EMPTYING processedTables");
+            processedTables.clear();
+         }
+
          currentFunction = "RewriteMultiNullSupplier";
 
          //fill in tablesStack
