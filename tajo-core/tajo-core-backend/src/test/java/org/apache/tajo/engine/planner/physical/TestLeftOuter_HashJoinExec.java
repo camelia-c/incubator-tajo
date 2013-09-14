@@ -127,8 +127,9 @@ public class TestLeftOuter_HashJoinExec {
     appender2.init();
     Tuple tuple2 = new VTuple(job3Meta.getSchema().getColumnNum());
     for (int i = 0; i < 3; i++) {
+      int x = 100 + i;
       tuple2.put(new Datum[] { DatumFactory.createInt4(100 + i),
-                    DatumFactory.createText("job_" + (100 + i)) });
+                    DatumFactory.createText("job_" + x) });
       appender2.addTuple(tuple2);
     }
 
@@ -166,19 +167,21 @@ public class TestLeftOuter_HashJoinExec {
     Tuple tuple3 = new VTuple(emp3Meta.getSchema().getColumnNum());
 
     for (int i = 1; i < 4; i += 2) {
+      int x = 10 + i;
       tuple3.put(new Datum[] { DatumFactory.createInt4(i),
           DatumFactory.createInt4(10 + i),
-          DatumFactory.createText("firstname_" + (10 + i)),
-          DatumFactory.createText("lastname_" + (10 + i)),
+          DatumFactory.createText("firstname_" + x),
+          DatumFactory.createText("lastname_" + x),
           DatumFactory.createInt4(i),
           DatumFactory.createFloat4(123 * i),
           DatumFactory.createInt4(100 + i) });
       appender3.addTuple(tuple3);
 
-       tuple3.put(new Datum[] { DatumFactory.createInt4(i),
+      int y = 20 + i;
+      tuple3.put(new Datum[] { DatumFactory.createInt4(i),
           DatumFactory.createInt4(20 + i),
-          DatumFactory.createText("firstname_" + (20 + i)),
-          DatumFactory.createText("lastname_" + (20 + i)),
+          DatumFactory.createText("firstname_" + y),
+          DatumFactory.createText("lastname_" + y),
           DatumFactory.createInt4(i),
           DatumFactory.createFloat4(123 * i),
           DatumFactory.createInt4(100 + i) });
@@ -186,10 +189,11 @@ public class TestLeftOuter_HashJoinExec {
     }
 
     for (int i = 5; i < 10; i += 2) {
+      int x = 10 + i;
       tuple3.put(new Datum[] { DatumFactory.createInt4(i),
           DatumFactory.createInt4(10 + i),
-          DatumFactory.createText("firstname_" + (10 + i)),
-          DatumFactory.createText("lastname_" + (10 + i)),
+          DatumFactory.createText("firstname_" + x),
+          DatumFactory.createText("lastname_" + x),
           DatumFactory.createInt4(i),
           DatumFactory.createFloat4(123 * i),
           DatumFactory.createNullDatum() });
@@ -251,6 +255,7 @@ public class TestLeftOuter_HashJoinExec {
   
        while ((tuple = exec.next()) != null) {
          //TODO check contents
+         count = count + 1;
        }
        exec.close();
        assertEquals(12, count);
@@ -293,6 +298,7 @@ public class TestLeftOuter_HashJoinExec {
   
        while ((tuple = exec.next()) != null) {
          //TODO check contents
+         count = count + 1;
        }
        exec.close();
        assertEquals(5, count);
@@ -335,6 +341,7 @@ public class TestLeftOuter_HashJoinExec {
   
        while ((tuple = exec.next()) != null) {
          //TODO check contents
+         count = count + 1;
        }
        exec.close();
        assertEquals(7, count);
