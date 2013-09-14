@@ -164,8 +164,7 @@ public class TestLeftOuter_NLJoinExec {
 
     for (int i = 1; i < 4; i += 2) {
       int x = 10 + i;
-      tuple3.put(new Datum[] { DatumFactory.createInt4(i),
-          DatumFactory.createInt4(10 + i),
+      tuple3.put(new Datum[] { DatumFactory.createInt4(10 + i),
           DatumFactory.createText("firstname_" + x),
           DatumFactory.createText("lastname_" + x),
           DatumFactory.createInt4(i),
@@ -174,8 +173,7 @@ public class TestLeftOuter_NLJoinExec {
       appender3.addTuple(tuple3);
 
       int y = 20 + i;
-      tuple3.put(new Datum[] { DatumFactory.createInt4(i),
-          DatumFactory.createInt4(20 + i),
+      tuple3.put(new Datum[] { DatumFactory.createInt4(20 + i),
           DatumFactory.createText("firstname_" + y),
           DatumFactory.createText("lastname_" + y),
           DatumFactory.createInt4(i),
@@ -186,8 +184,7 @@ public class TestLeftOuter_NLJoinExec {
 
     for (int i = 5; i < 10; i += 2) {
       int x = 10 + i;
-      tuple3.put(new Datum[] { DatumFactory.createInt4(i),
-          DatumFactory.createInt4(10 + i),
+      tuple3.put(new Datum[] { DatumFactory.createInt4(10 + i),
           DatumFactory.createText("firstname_" + x),
           DatumFactory.createText("lastname_" + x),
           DatumFactory.createInt4(i),

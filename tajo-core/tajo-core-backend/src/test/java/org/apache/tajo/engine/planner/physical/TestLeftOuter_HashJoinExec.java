@@ -168,8 +168,7 @@ public class TestLeftOuter_HashJoinExec {
 
     for (int i = 1; i < 4; i += 2) {
       int x = 10 + i;
-      tuple3.put(new Datum[] { DatumFactory.createInt4(i),
-          DatumFactory.createInt4(10 + i),
+      tuple3.put(new Datum[] { DatumFactory.createInt4(10 + i),
           DatumFactory.createText("firstname_" + x),
           DatumFactory.createText("lastname_" + x),
           DatumFactory.createInt4(i),
@@ -178,8 +177,7 @@ public class TestLeftOuter_HashJoinExec {
       appender3.addTuple(tuple3);
 
       int y = 20 + i;
-      tuple3.put(new Datum[] { DatumFactory.createInt4(i),
-          DatumFactory.createInt4(20 + i),
+      tuple3.put(new Datum[] { DatumFactory.createInt4(20 + i),
           DatumFactory.createText("firstname_" + y),
           DatumFactory.createText("lastname_" + y),
           DatumFactory.createInt4(i),
@@ -190,8 +188,7 @@ public class TestLeftOuter_HashJoinExec {
 
     for (int i = 5; i < 10; i += 2) {
       int x = 10 + i;
-      tuple3.put(new Datum[] { DatumFactory.createInt4(i),
-          DatumFactory.createInt4(10 + i),
+      tuple3.put(new Datum[] { DatumFactory.createInt4(10 + i),
           DatumFactory.createText("firstname_" + x),
           DatumFactory.createText("lastname_" + x),
           DatumFactory.createInt4(i),
@@ -221,7 +218,7 @@ public class TestLeftOuter_HashJoinExec {
   };
 
   @Test
-  public final void testLeftOuter_HashInnerJoin0() throws IOException, PlanningException {
+  public final void testLeftOuter_HashJoinExec0() throws IOException, PlanningException {
     Fragment[] dep3Frags = StorageManager.splitNG(conf, "dep3", dep3.getMeta(), dep3.getPath(),
         Integer.MAX_VALUE);
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
@@ -229,7 +226,7 @@ public class TestLeftOuter_HashJoinExec {
 
     Fragment[] merged = TUtil.concat(dep3Frags, emp3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/testLeftOuter_HashInnerJoin");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_HashJoinExec");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr expr = analyzer.parse(QUERIES[0]);
@@ -264,7 +261,7 @@ public class TestLeftOuter_HashJoinExec {
 
 
   @Test
-  public final void testLeftOuter_HashInnerJoin1() throws IOException, PlanningException {
+  public final void testLeftOuter_HashJoinExec1() throws IOException, PlanningException {
     Fragment[] job3Frags = StorageManager.splitNG(conf, "job3", job3.getMeta(), job3.getPath(),
         Integer.MAX_VALUE);
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
@@ -272,7 +269,7 @@ public class TestLeftOuter_HashJoinExec {
 
     Fragment[] merged = TUtil.concat(job3Frags, emp3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/testLeftOuter_HashInnerJoin");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_HashJoinExec");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr expr = analyzer.parse(QUERIES[1]);
@@ -306,7 +303,7 @@ public class TestLeftOuter_HashJoinExec {
   }
 
     @Test
-  public final void testLeftOuter_HashInnerJoin2() throws IOException, PlanningException {
+  public final void testLeftOuter_HashJoinExec2() throws IOException, PlanningException {
     
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
         Integer.MAX_VALUE);
@@ -315,7 +312,7 @@ public class TestLeftOuter_HashJoinExec {
 
     Fragment[] merged = TUtil.concat(emp3Frags, job3Frags);
 
-    Path workDir = CommonTestingUtil.getTestDir("target/test-data/testLeftOuter_HashInnerJoin");
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestLeftOuter_HashJoinExec");
     TaskAttemptContext ctx = new TaskAttemptContext(conf,
         TUtil.newQueryUnitAttemptId(), merged, workDir);
     Expr expr = analyzer.parse(QUERIES[2]);
