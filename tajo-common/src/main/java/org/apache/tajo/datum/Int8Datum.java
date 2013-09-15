@@ -25,9 +25,14 @@ import org.apache.tajo.datum.exception.InvalidOperationException;
 
 import java.nio.ByteBuffer;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 public class Int8Datum extends NumericDatum {
   private static final int size = 8;
   @Expose private long val;
+
+  private static final Log LOG = LogFactory.getLog(Int8Datum.class);
 
 	public Int8Datum() {
 		super(TajoDataTypes.Type.INT8);
@@ -113,6 +118,13 @@ public class Int8Datum extends NumericDatum {
 
   @Override
   public BooleanDatum equalsTo(Datum datum) {
+
+    if ( datum instanceof NullDatum) {
+       LOG.info("IN INT8DATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => return false");
+       return DatumFactory.createBool(false);
+    }    
+
+
     switch (datum.type()) {
       case INT2:
         return DatumFactory.createBool(val == datum.asInt2());
@@ -125,7 +137,13 @@ public class Int8Datum extends NumericDatum {
       case FLOAT8:
         return DatumFactory.createBool(val == datum.asFloat8());
       default:
-        throw new InvalidOperationException(datum.type());
+        if (datum instanceof NullDatum) {
+          LOG.info("IN INT8DATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => return false");
+          return DatumFactory.createBool(false);
+        } else {
+          LOG.info("IN INT8DATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => THROWBAD");
+          throw new InvalidOperationException();
+        }
     }
   }
 
@@ -173,7 +191,11 @@ public class Int8Datum extends NumericDatum {
           return 0;
         }
       default:
-        throw new InvalidOperationException(datum.type());
+        if (datum instanceof NullDatum) {
+           return -1;
+         } else {
+           throw new InvalidOperationException();
+         }
     }
   }
 

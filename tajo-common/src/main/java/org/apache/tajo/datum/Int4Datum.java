@@ -23,10 +23,18 @@ import org.apache.tajo.common.TajoDataTypes.Type;
 import org.apache.tajo.datum.exception.InvalidCastException;
 import org.apache.tajo.datum.exception.InvalidOperationException;
 
+import org.apache.tajo.datum.NullDatum;
+
 import java.nio.ByteBuffer;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 public class Int4Datum extends NumericDatum {
   private static final int size = 4;
+
+  private static final Log LOG = LogFactory.getLog(Int4Datum.class);
+
   @Expose private int val;
 	
 	public Int4Datum() {
@@ -107,6 +115,12 @@ public class Int4Datum extends NumericDatum {
 
   @Override
   public BooleanDatum equalsTo(Datum datum) {
+
+    if ( datum instanceof NullDatum) {
+       LOG.info("IN INT4DATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => return false");
+       return DatumFactory.createBool(false);
+    }    
+
     switch (datum.type()) {
     case INT2:
       return DatumFactory.createBool(val == datum.asInt2());
@@ -119,12 +133,19 @@ public class Int4Datum extends NumericDatum {
     case FLOAT8:
       return DatumFactory.createBool(val == datum.asFloat8());
     default:
-      throw new InvalidOperationException();
+      if (datum instanceof NullDatum) {
+        LOG.info("IN INT4DATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => return false");
+        return DatumFactory.createBool(false);
+      } else {
+        LOG.info("IN INT4DATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => THROWBAD");
+        throw new InvalidOperationException();
+      }
     }
   }
 
   @Override
   public int compareTo(Datum datum) {
+    
     switch (datum.type()) {
       case INT2:
         if (val < datum.asInt2()) {
@@ -167,7 +188,11 @@ public class Int4Datum extends NumericDatum {
           return 0;
         }
       default:
-        throw new InvalidOperationException(datum.type());
+         if (datum instanceof NullDatum) {
+           return -1;
+         } else {
+           throw new InvalidOperationException();
+         }
     }
   }
 

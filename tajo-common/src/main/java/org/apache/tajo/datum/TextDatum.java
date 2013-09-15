@@ -26,9 +26,14 @@ import org.apache.tajo.datum.exception.InvalidOperationException;
 
 import java.util.Arrays;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 public class TextDatum extends Datum {
   @Expose private int size;
   @Expose private byte [] bytes;
+ 
+  private static final Log LOG = LogFactory.getLog(TextDatum.class);
 
   public TextDatum() {
     super(TajoDataTypes.Type.TEXT);
@@ -101,7 +106,11 @@ public class TextDatum extends Datum {
         return WritableComparator.compareBytes(this.bytes, 0, this.bytes.length,
             o, 0, o.length);
       default:
-        throw new InvalidOperationException(datum.type());
+        if (datum instanceof NullDatum) {
+           return -1;
+         } else {
+           throw new InvalidOperationException();
+         }
     }
   }
 
@@ -117,12 +126,24 @@ public class TextDatum extends Datum {
 
   @Override
   public BooleanDatum equalsTo(Datum datum) {
+
+    if ( datum instanceof NullDatum) {
+       LOG.info("IN textDATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => return false");
+       return DatumFactory.createBool(false);
+    } 
+
     switch (datum.type()) {
       case TEXT:
         return DatumFactory.createBool(
             Arrays.equals(this.bytes, datum.asByteArray()));
       default:
-        throw new InvalidOperationException(datum.type());
+        if (datum instanceof NullDatum) {
+           LOG.info("IN textDATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => return false");
+           return DatumFactory.createBool(false);
+         } else {
+           LOG.info("IN textDATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => THROWBAD");
+           throw new InvalidOperationException();
+         }
     }
   }
 

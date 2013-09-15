@@ -25,10 +25,15 @@ import java.util.Arrays;
 
 import static org.apache.tajo.common.TajoDataTypes.Type;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 public class CharDatum extends Datum {
   @Expose private int size;
   @Expose private byte[] bytes;
   private String chars = null;
+
+  private static final Log LOG = LogFactory.getLog(CharDatum.class);
 
 	public CharDatum() {
 		super(Type.CHAR);
@@ -134,11 +139,22 @@ public class CharDatum extends Datum {
 
   @Override
   public BooleanDatum equalsTo(Datum datum) {
+    if ( datum instanceof NullDatum) {
+       LOG.info("IN charDATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => return false");
+       return DatumFactory.createBool(false);
+    } 
+
     switch (datum.type()) {
     case CHAR:
       return DatumFactory.createBool(this.equals(datum));
     default:
-      throw new InvalidOperationException(datum.type());
+      if (datum instanceof NullDatum) {
+        LOG.info("IN charDATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => return false");
+        return DatumFactory.createBool(false);
+      } else {
+        LOG.info("IN charDATUM.EQUALSTO val=" + this.toJson() + "datum=" + datum.toJson() + " => THROWBAD");
+        throw new InvalidOperationException();
+      }
     }
   }
   
@@ -149,7 +165,11 @@ public class CharDatum extends Datum {
         CharDatum other = (CharDatum) datum;
         return this.getString().compareTo(other.getString());
     default:
-      throw new InvalidOperationException(datum.type());
+         if (datum instanceof NullDatum) {
+           return -1;
+         } else {
+           throw new InvalidOperationException();
+         }
     }
   }
 }
