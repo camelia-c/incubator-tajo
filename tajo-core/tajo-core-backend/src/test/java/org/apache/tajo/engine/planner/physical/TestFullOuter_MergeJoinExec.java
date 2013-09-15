@@ -261,7 +261,7 @@ public class TestFullOuter_MergeJoinExec {
       "select dep4.dep_id, dep_name, emp_id, salary from emp3 full outer join dep4 on dep4.dep_id = emp4.dep_id", //3 no nulls, right continues after left
   };
 
-  //@Test
+  @Test
   public final void testFullOuter_MergeJoin0() throws IOException, PlanningException {
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
         Integer.MAX_VALUE);
@@ -337,7 +337,7 @@ public class TestFullOuter_MergeJoinExec {
   }
 
 
-  //@Test
+  @Test
   public final void testFullOuter_MergeJoin1() throws IOException, PlanningException {
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
         Integer.MAX_VALUE);
@@ -412,7 +412,7 @@ public class TestFullOuter_MergeJoinExec {
     assertEquals(8, count);
   }
 
-  //@Test
+  @Test
   public final void testFullOuter_MergeJoin2() throws IOException, PlanningException {
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
         Integer.MAX_VALUE);
@@ -489,7 +489,7 @@ public class TestFullOuter_MergeJoinExec {
   }
 
 
-  //@Test
+  @Test
   public final void testFullOuter_MergeJoin3() throws IOException, PlanningException {
     Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
         Integer.MAX_VALUE);
