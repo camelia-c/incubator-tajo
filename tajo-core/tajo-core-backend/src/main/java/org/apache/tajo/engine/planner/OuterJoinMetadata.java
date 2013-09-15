@@ -188,6 +188,16 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
      else{
          //check if it a null-intolerant selection 
          //ON THE LEFT
+         if((wherecond.getLeftExpr().getType() == EvalType.FIELD) && (wherecond.getType() == EvalType.IN)){
+           String lefttablename= ((FieldEval) wherecond.getLeftExpr()).getTableId();
+           oju2.getTheTable(currentBlockName, lefttablename).isNullRestricted = true;
+           oju2.getTheTable(currentBlockName, lefttablename).depthRestricted = 0;
+         }
+         if((wherecond.getLeftExpr().getType() == EvalType.FIELD) && (wherecond.getType() == EvalType.LIKE)){
+           String lefttablename= ((FieldEval) wherecond.getLeftExpr()).getTableId();
+           oju2.getTheTable(currentBlockName, lefttablename).isNullRestricted = true;
+           oju2.getTheTable(currentBlockName, lefttablename).depthRestricted = 0;
+         }
          if((wherecond.getLeftExpr().getType() == EvalType.FIELD) && (wherecond.getType() != EvalType.IS_NULL)){
            String lefttablename= ((FieldEval) wherecond.getLeftExpr()).getTableId();
            oju2.getTheTable(currentBlockName, lefttablename).isNullRestricted = true;
@@ -201,6 +211,16 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
  
          //ON THE RIGHT
          //-- note: the (wherecond.getType()!=EvalNode.Type.IS) test is useless on the right case, it's always true
+         if((wherecond.getRightExpr().getType() == EvalType.FIELD) && (wherecond.getType() == EvalType.IN)){
+           String righttablename= ((FieldEval) wherecond.getRightExpr()).getTableId();
+           oju2.getTheTable(currentBlockName, righttablename).isNullRestricted = true;
+           oju2.getTheTable(currentBlockName, righttablename).depthRestricted = 0;
+         }
+         if((wherecond.getRightExpr().getType() == EvalType.FIELD) && (wherecond.getType() == EvalType.LIKE)){
+           String righttablename= ((FieldEval) wherecond.getRightExpr()).getTableId();
+           oju2.getTheTable(currentBlockName, righttablename).isNullRestricted = true;
+           oju2.getTheTable(currentBlockName, righttablename).depthRestricted = 0;
+         }
          if((wherecond.getRightExpr().getType() == EvalType.FIELD) && (wherecond.getType() != EvalType.IS_NULL)){
            String righttablename= ((FieldEval) wherecond.getRightExpr()).getTableId();
            oju2.getTheTable(currentBlockName, righttablename).isNullRestricted = true;
@@ -213,7 +233,10 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
          }
      }
 
-     if((wherecond.getLeftExpr().getType() != EvalType.FIELD) && (wherecond.getLeftExpr().getType() != EvalType.FUNCTION) && (wherecond.getLeftExpr().getType() != EvalType.CONST))
+     if ((wherecond.getType() == EvalType.IN) || (wherecond.getType() == EvalType.LIKE))
+        return;
+
+     if((wherecond.getLeftExpr().getType() != EvalType.FIELD) && (wherecond.getLeftExpr().getType() != EvalType.FUNCTION) && (wherecond.getLeftExpr().getType() != EvalType.CONST) )
         recursiveWhere(wherecond.getLeftExpr(), depth+1);
      if((wherecond.getRightExpr().getType() != EvalType.FIELD) && (wherecond.getRightExpr().getType() != EvalType.FUNCTION) && (wherecond.getRightExpr().getType() != EvalType.CONST))
         recursiveWhere(wherecond.getRightExpr(), depth+1);
