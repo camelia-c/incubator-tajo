@@ -376,7 +376,7 @@ public class TestSelectQuery {
     }
   }
 
-  //@Test  //camelia
+  @Test 
   public final void testUnion1() throws Exception {
     ResultSet res = tpch.execute(
         "select o_custkey as num from orders union select c_custkey as num from customer");

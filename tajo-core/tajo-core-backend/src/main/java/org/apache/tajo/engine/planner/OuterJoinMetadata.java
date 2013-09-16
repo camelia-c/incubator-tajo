@@ -50,11 +50,13 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
         //fill in the allTables for this qb
         Collection<ScanNode> relations = qb.getRelations();
         Iterator it2 = relations.iterator();
+        int countTablesInBlock = 0;
 
         while(it2.hasNext()) {
            ScanNode scan = (ScanNode) it2.next();
            LOG.info("******** TABLE:" + scan.getFromTable().getTableName());
            oju2.putTheTable(qb.getName(), scan.getFromTable());
+           countTablesInBlock ++;
         }
 
          //go visit nodes in this qb, to count
@@ -63,8 +65,13 @@ public class OuterJoinMetadata extends BasicLogicalPlanVisitor<Integer> {
          currentBlockName = qb.getName();
          visitChild(plan, qb.getRoot(), stack, depth);
 
-         LOG.info("TABLE    COUNTLEFT  COUNTRIGHT  COUNTFULL  COUNTINNER  ISNULLSUPPLYING   COUNTNULLSUPPLYING  ISNULLRESTRICTED DEPTHRESTRICTED\n");
-         oju2.printAllTables(qb.getName());
+         if(countTablesInBlock == 0) {
+            LOG.info("No tables in block " + qb.getName());
+         }
+         else {
+            LOG.info("TABLE    COUNTLEFT  COUNTRIGHT  COUNTFULL  COUNTINNER  ISNULLSUPPLYING   COUNTNULLSUPPLYING  ISNULLRESTRICTED DEPTHRESTRICTED\n");
+            oju2.printAllTables(qb.getName());
+         }
 
       }
 
