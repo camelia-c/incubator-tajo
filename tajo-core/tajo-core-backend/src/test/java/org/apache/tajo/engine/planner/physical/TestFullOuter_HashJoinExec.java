@@ -60,6 +60,7 @@ public class TestFullOuter_HashJoinExec {
   private TableDesc dep3;
   private TableDesc job3;
   private TableDesc emp3;
+  private TableDesc phone3;
   
 
   @Before
@@ -202,6 +203,30 @@ public class TestFullOuter_HashJoinExec {
     emp3 = CatalogUtil.newTableDesc("emp3", emp3Meta, emp3Path);
     catalog.addTable(emp3);
 
+    //---------------------phone3 --------------------
+    // emp_id  | phone_number
+    // -----------------------------------------------
+    // this table is empty, no rows
+
+    Schema phone3Schema = new Schema();
+    phone3Schema.addColumn("emp_id", Type.INT4);
+    phone3Schema.addColumn("phone_number", Type.TEXT);
+
+
+    TableMeta phone3Meta = CatalogUtil.newTableMeta(phone3Schema,
+        StoreType.CSV);
+    Path phone3Path = new Path(testDir, "phone3.csv");
+    Appender appender5 = StorageManager.getAppender(conf, phone3Meta, phone3Path);
+    appender5.init();
+    
+    appender5.flush();
+    appender5.close();
+    phone3 = CatalogUtil.newTableDesc("phone3", phone3Meta, phone3Path);
+    catalog.addTable(phone3);
+
+
+
+
     analyzer = new SQLAnalyzer();
     planner = new LogicalPlanner(catalog);
   }
@@ -214,7 +239,8 @@ public class TestFullOuter_HashJoinExec {
   String[] QUERIES = {
       "select dep3.dep_id, dep_name, emp_id, salary from dep3 full outer join emp3 on dep3.dep_id = emp3.dep_id", //0 no nulls
       "select job3.job_id, job_title, emp_id, salary from job3 full outer join emp3 on job3.job_id=emp3.job_id", //1 nulls on the right operand
-      "select job3.job_id, job_title, emp_id, salary from emp3 full outer join job3 on job3.job_id=emp3.job_id" //2 nulls on the left side
+      "select job3.job_id, job_title, emp_id, salary from emp3 full outer join job3 on job3.job_id=emp3.job_id", //2 nulls on the left side
+      "select emp3.emp_id, first_name, phone_number from emp3 full outer join phone3 on emp3.emp_id = phone3.emp_id" //3 one operand is empty
   };
 
   @Test
@@ -360,6 +386,56 @@ public class TestFullOuter_HashJoinExec {
     }
     exec.close();
     assertEquals(8, count);
+    
+  }
+
+
+  @Test
+  public final void testFullOuter_HashJoinExec3() throws IOException, PlanningException {
+    
+    Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
+        Integer.MAX_VALUE);
+    Fragment[] phone3Frags = StorageManager.splitNG(conf, "phone3", phone3.getMeta(), phone3.getPath(),
+        Integer.MAX_VALUE);
+
+    Fragment[] merged = TUtil.concat(emp3Frags, phone3Frags);
+
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/TestFullOuter_HashJoinExec3");
+    TaskAttemptContext ctx = new TaskAttemptContext(conf,
+        TUtil.newQueryUnitAttemptId(), merged, workDir);
+    Expr expr = analyzer.parse(QUERIES[3]);
+    LogicalNode plan = planner.createPlan(expr).getRootBlock().getRoot();
+
+    PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf, sm);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+
+    ProjectionExec proj = (ProjectionExec) exec;
+    if (proj.getChild() instanceof FullOuter_MergeJoinExec) {
+      FullOuter_MergeJoinExec join = (FullOuter_MergeJoinExec) proj.getChild();
+      ExternalSortExec sortout = (ExternalSortExec) join.getLeftChild();
+      ExternalSortExec sortin = (ExternalSortExec) join.getRightChild();
+      SeqScanExec scanout = (SeqScanExec) sortout.getChild();
+      SeqScanExec scanin = (SeqScanExec) sortin.getChild();
+
+      FullOuter_HashJoinExec hashjoin = new FullOuter_HashJoinExec(ctx, join.getPlan(), scanout, scanin);
+      
+      proj.setChild(hashjoin);
+
+      exec = proj;
+     
+    }
+    
+    Tuple tuple;
+    int count = 0;
+    int i = 1;
+    exec.init();
+  
+    while ((tuple = exec.next()) != null) {
+      //TODO check contents
+      count = count + 1;
+    }
+    exec.close();
+    assertEquals(7, count);
     
   }
 

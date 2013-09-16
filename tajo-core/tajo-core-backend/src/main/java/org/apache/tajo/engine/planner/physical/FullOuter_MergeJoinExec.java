@@ -75,6 +75,8 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
   private int posInnerTupleSlots = -1;
   private int posOuterTupleSlots = -1;
   boolean endInPopulationStage = false;
+  private boolean initLeftDone = false;
+  private boolean initRightDone = false;
   //-- camelia
 
 
@@ -155,6 +157,17 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
            //before exit,  a leftnullpadded tuple should be built for all remaining right side and a  rightnullpadded tuple should be built for all remaining left side 
            
            LOG.info("END STAGE \n");
+
+           if (initRightDone == false) {
+              //maybe the left operand was empty => the right one didn't have the chance to initialize
+              LOG.info(" 2ND ATTEMPT FOR FIRST TIME INITIALIZATION STAGE INNERRTUPLE \n");
+              innerTuple = rightChild.next();
+              initRightDone = true;
+           }
+
+
+
+
            if((innerTuple == null) && (outerTuple == null)) {  
               LOG.info(" end is trrue"); 
               return null;

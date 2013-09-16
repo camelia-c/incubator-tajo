@@ -63,6 +63,7 @@ public class TestRightOuter_MergeJoinExec {
   private TableDesc dep4;
   private TableDesc job3;
   private TableDesc emp3;
+  private TableDesc phone3;
 
   @Before
   public void setUp() throws Exception {
@@ -245,6 +246,29 @@ public class TestRightOuter_MergeJoinExec {
     emp3 = CatalogUtil.newTableDesc("emp3", emp3Meta, emp3Path);
     catalog.addTable(emp3);
 
+    //---------------------phone3 --------------------
+    // emp_id  | phone_number
+    // -----------------------------------------------
+    // this table is empty, no rows
+
+    Schema phone3Schema = new Schema();
+    phone3Schema.addColumn("emp_id", Type.INT4);
+    phone3Schema.addColumn("phone_number", Type.TEXT);
+
+
+    TableMeta phone3Meta = CatalogUtil.newTableMeta(phone3Schema,
+        StoreType.CSV);
+    Path phone3Path = new Path(testDir, "phone3.csv");
+    Appender appender5 = StorageManager.getAppender(conf, phone3Meta, phone3Path);
+    appender5.init();
+    
+    appender5.flush();
+    appender5.close();
+    phone3 = CatalogUtil.newTableDesc("phone3", phone3Meta, phone3Path);
+    catalog.addTable(phone3);
+
+
+
     analyzer = new SQLAnalyzer();
     planner = new LogicalPlanner(catalog);
   }
@@ -259,6 +283,8 @@ public class TestRightOuter_MergeJoinExec {
       "select job3.job_id, job_title, emp_id, salary from emp3 right outer join job3 on job3.job_id=emp3.job_id", //1 nulls on the left operand
       "select job3.job_id, job_title, emp_id, salary from job3 right outer join emp3 on job3.job_id=emp3.job_id", //2 nulls on the right side
       "select dep4.dep_id, dep_name, emp_id, salary from emp3 right outer join dep4 on dep4.dep_id = emp3.dep_id", //3 no nulls, right continues after left
+      "select emp3.emp_id, first_name, phone_number from emp3 right outer join phone3 on emp3.emp_id = phone3.emp_id", //4 one operand is empty
+      "select phone_number, emp3.emp_id, first_name from phone3 right outer join emp3 on emp3.emp_id = phone3.emp_id" //5 one operand is empty
   };
 
   @Test
@@ -564,7 +590,160 @@ public class TestRightOuter_MergeJoinExec {
     assertEquals(13, count);
   }
 
+    @Test
+  public final void testRightOuter_MergeJoin4() throws IOException, PlanningException {
+    Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
+        Integer.MAX_VALUE);
+    Fragment[] phone3Frags = StorageManager.splitNG(conf, "phone3", phone3.getMeta(), phone3.getPath(),
+        Integer.MAX_VALUE);
+
+    Fragment[] merged = TUtil.concat(emp3Frags, phone3Frags);
 
 
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/testRightOuter_MergeJoin4");
+    TaskAttemptContext ctx = new TaskAttemptContext(conf,
+        TUtil.newQueryUnitAttemptId(), merged, workDir);
+    Expr expr = analyzer.parse(QUERIES[4]);
+    LogicalNode plan = planner.createPlan(expr).getRootBlock().getRoot();
+
+    PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+
+    ProjectionExec proj = (ProjectionExec) exec;
+
+    // if it chose the hash join WITH REVERSED ORDER, convert to merge join exec
+    if (!(proj.getChild() instanceof RightOuter_MergeJoinExec)) {
+      //TODO
+      BinaryPhysicalExec aJoin = (BinaryPhysicalExec) proj.getChild();
+      SeqScanExec outerScan = (SeqScanExec) aJoin.getRightChild(); //correct is reversed
+      SeqScanExec innerScan = (SeqScanExec) aJoin.getLeftChild();
+
+      SeqScanExec tmp;
+      if (!outerScan.getTableName().equals("emp3")) {
+        tmp = outerScan;
+        outerScan = innerScan;
+        innerScan = tmp;
+      }
+
+      SortSpec[] outerSortKeys = new SortSpec[1];
+      SortSpec[] innerSortKeys = new SortSpec[1];
+
+      Schema emp3Schema = catalog.getTableDesc("emp3").getMeta()
+          .getSchema();
+      outerSortKeys[0] = new SortSpec(
+          emp3Schema.getColumnByName("emp_id"));
+      SortNode outerSort = new SortNode(outerSortKeys);
+      outerSort.setInSchema(outerScan.getSchema());
+      outerSort.setOutSchema(outerScan.getSchema());
+
+      Schema phone3Schema = catalog.getTableDesc("phone3").getMeta().getSchema();
+      innerSortKeys[0] = new SortSpec(
+          phone3Schema.getColumnByName("emp_id"));
+      SortNode innerSort = new SortNode(innerSortKeys);
+      innerSort.setInSchema(innerScan.getSchema());
+      innerSort.setOutSchema(innerScan.getSchema());
+
+
+      MemSortExec outerSortExec = new MemSortExec(ctx, outerSort, outerScan);
+      MemSortExec innerSortExec = new MemSortExec(ctx, innerSort, innerScan);
+
+      RightOuter_MergeJoinExec mergeJoin = new RightOuter_MergeJoinExec(ctx,
+          ((LeftOuter_HashJoinExec)aJoin).getPlan(), outerSortExec, innerSortExec,
+          outerSortKeys, innerSortKeys);
+      proj.setChild(mergeJoin);
+      exec = proj;
+    }
+
+    Tuple tuple;
+    int count = 0;
+    int i = 1;
+    exec.init();
+  
+    while ((tuple = exec.next()) != null) {
+       //TODO check contents
+       count = count + 1;
+    }
+    exec.close();
+    assertEquals(0, count);
+  }
+
+   @Test
+  public final void testRightOuter_MergeJoin5() throws IOException, PlanningException {
+    Fragment[] emp3Frags = StorageManager.splitNG(conf, "emp3", emp3.getMeta(), emp3.getPath(),
+        Integer.MAX_VALUE);
+    Fragment[] phone3Frags = StorageManager.splitNG(conf, "phone3", phone3.getMeta(), phone3.getPath(),
+        Integer.MAX_VALUE);
+
+    Fragment[] merged = TUtil.concat(phone3Frags,emp3Frags);
+
+
+    Path workDir = CommonTestingUtil.getTestDir("target/test-data/testRightOuter_MergeJoin5");
+    TaskAttemptContext ctx = new TaskAttemptContext(conf,
+        TUtil.newQueryUnitAttemptId(), merged, workDir);
+    Expr expr = analyzer.parse(QUERIES[5]);
+    LogicalNode plan = planner.createPlan(expr).getRootBlock().getRoot();
+
+    PhysicalPlanner phyPlanner = new PhysicalPlannerImpl(conf,sm);
+    PhysicalExec exec = phyPlanner.createPlan(ctx, plan);
+
+    ProjectionExec proj = (ProjectionExec) exec;
+
+    // if it chose the hash join WITH REVERSED ORDER, convert to merge join exec
+    if (!(proj.getChild() instanceof RightOuter_MergeJoinExec)) {
+      //TODO
+      BinaryPhysicalExec aJoin = (BinaryPhysicalExec) proj.getChild();
+      SeqScanExec outerScan = (SeqScanExec) aJoin.getRightChild(); //correct is reversed
+      SeqScanExec innerScan = (SeqScanExec) aJoin.getLeftChild();
+
+      SeqScanExec tmp;
+      if (!outerScan.getTableName().equals("phone3")) {
+        tmp = outerScan;
+        outerScan = innerScan;
+        innerScan = tmp;
+      }
+
+      SortSpec[] outerSortKeys = new SortSpec[1];
+      SortSpec[] innerSortKeys = new SortSpec[1];
+
+      Schema phone3Schema = catalog.getTableDesc("phone3").getMeta()
+          .getSchema();
+      outerSortKeys[0] = new SortSpec(
+          phone3Schema.getColumnByName("emp_id"));
+      SortNode outerSort = new SortNode(outerSortKeys);
+      outerSort.setInSchema(outerScan.getSchema());
+      outerSort.setOutSchema(outerScan.getSchema());
+
+      Schema emp3Schema = catalog.getTableDesc("emp3").getMeta().getSchema();
+      innerSortKeys[0] = new SortSpec(
+          emp3Schema.getColumnByName("emp_id"));
+      SortNode innerSort = new SortNode(innerSortKeys);
+      innerSort.setInSchema(innerScan.getSchema());
+      innerSort.setOutSchema(innerScan.getSchema());
+
+
+      MemSortExec outerSortExec = new MemSortExec(ctx, outerSort, outerScan);
+      MemSortExec innerSortExec = new MemSortExec(ctx, innerSort, innerScan);
+
+      RightOuter_MergeJoinExec mergeJoin = new RightOuter_MergeJoinExec(ctx,
+          ((LeftOuter_HashJoinExec)aJoin).getPlan(), outerSortExec, innerSortExec,
+          outerSortKeys, innerSortKeys);
+      proj.setChild(mergeJoin);
+      exec = proj;
+    }
+
+    Tuple tuple;
+    int count = 0;
+    int i = 1;
+    exec.init();
+  
+    while ((tuple = exec.next()) != null) {
+       //TODO check contents
+       count = count + 1;
+    }
+    exec.close();
+    assertEquals(7, count);
+  }
+
+  
 
 }

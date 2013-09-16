@@ -75,7 +75,9 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
   private static final Log LOG = LogFactory.getLog(RightOuter_MergeJoinExec.class);
   private int posInnerTupleSlots = -1;
   private int posOuterTupleSlots = -1;
-  boolean endInPopulationStage = false;
+  private boolean endInPopulationStage = false;
+  private boolean initLeftDone = false;
+  private boolean initRightDone = false;
   //-- camelia
 
   public RightOuter_MergeJoinExec(TaskAttemptContext context, JoinNode plan, PhysicalExec outer,
@@ -155,6 +157,13 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
            LOG.info("END STAGE \n");
            //before exit,  a leftnullpadded tuple should be built for all remaining right side
            
+           if (initRightDone == false) {
+              //maybe the left operand was empty => the right one didn't have the chance to initialize
+              LOG.info(" 2ND ATTEMPT FOR FIRST TIME INITIALIZATION STAGE INNERRTUPLE \n");
+              innerTuple = rightChild.next();
+              initRightDone = true;
+           }
+
            if(innerTuple == null) {  
               LOG.info(" end is trrue");
               return null;
@@ -185,10 +194,13 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
          if(outerTuple == null){
            LOG.info(" FIRST TIME INITIALIZATION STAGE OUTERTUPLE \n");
            outerTuple = leftChild.next();
-           if( outerTuple != null)
+           if( outerTuple != null){
               LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+              initLeftDone = true;
+           }
            else {
               LOG.info("********first time leftChild.next() = null \n");
+              initLeftDone = true;
               end = true;
               continue;
            }
@@ -196,10 +208,13 @@ public class RightOuter_MergeJoinExec extends BinaryPhysicalExec {
          if(innerTuple == null){
            LOG.info(" FIRST TIME INITIALIZATION STAGE INNERRTUPLE \n");
            innerTuple = rightChild.next();
-           if(innerTuple != null)
+           if(innerTuple != null){
               LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+              initRightDone = true;
+           }
            else {
               LOG.info("********rightChild.next() = NULL\n");
+              initRightDone = true;
               end = true;
               continue;
            }
