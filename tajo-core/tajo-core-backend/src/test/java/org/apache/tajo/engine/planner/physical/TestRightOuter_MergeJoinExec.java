@@ -137,7 +137,7 @@ public class TestRightOuter_MergeJoinExec {
     Appender appender4 = StorageManager.getAppender(conf, dep4Meta, dep4Path);
     appender4.init();
     Tuple tuple4 = new VTuple(dep4Meta.getSchema().getColumnNum());
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 11; i++) {
       tuple4.put(new Datum[] { DatumFactory.createInt4(i),
                     DatumFactory.createText("dept_" + i),
                     DatumFactory.createInt4(1000 + i) });
@@ -258,7 +258,7 @@ public class TestRightOuter_MergeJoinExec {
       "select dep3.dep_id, dep_name, emp_id, salary from emp3 right outer join dep3 on dep3.dep_id = emp3.dep_id", //0 no nulls
       "select job3.job_id, job_title, emp_id, salary from emp3 right outer join job3 on job3.job_id=emp3.job_id", //1 nulls on the left operand
       "select job3.job_id, job_title, emp_id, salary from job3 right outer join emp3 on job3.job_id=emp3.job_id", //2 nulls on the right side
-      "select dep4.dep_id, dep_name, emp_id, salary from emp3 right outer join dep4 on dep4.dep_id = emp4.dep_id", //3 no nulls, right continues after left
+      "select dep4.dep_id, dep_name, emp_id, salary from emp3 right outer join dep4 on dep4.dep_id = emp3.dep_id", //3 no nulls, right continues after left
   };
 
   @Test
