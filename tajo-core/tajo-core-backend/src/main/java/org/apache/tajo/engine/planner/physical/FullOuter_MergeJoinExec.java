@@ -74,6 +74,7 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
   private static final Log LOG = LogFactory.getLog(FullOuter_MergeJoinExec.class);
   private int posInnerTupleSlots = -1;
   private int posOuterTupleSlots = -1;
+  boolean endInPopulationStage = false;
   //-- camelia
 
 
@@ -135,7 +136,7 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
  
   public Tuple next() throws IOException {
     Tuple previous;
-    boolean endInPopulationStage = false;
+    
 
     for (;;) {
             
@@ -149,11 +150,13 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
         LOG.info("should start a new round \n");
         if(end){
            
+           //---------------- finalizing stage, where remaining tuples on the right are transformed into leftnullpadded results  while  tuples on the left are transformed into rightnullpadded results 
            
            //before exit,  a leftnullpadded tuple should be built for all remaining right side and a  rightnullpadded tuple should be built for all remaining left side 
            
-           LOG.info(" end is trrue");
+           LOG.info("END STAGE \n");
            if((innerTuple == null) && (outerTuple == null)) {  
+              LOG.info(" end is trrue"); 
               return null;
            }
 
@@ -195,30 +198,44 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
           
          }//if end
 
+         //------------------------ initializing stage, reading the first tuple on each side -
+
          if(outerTuple == null){
+           LOG.info(" FIRST TIME INITIALIZATION STAGE OUTERTUPLE \n");
            outerTuple = leftChild.next();
            if( outerTuple != null)
               LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
-           else
+           else {
               LOG.info("********leftChild.next() = null \n");
+              end = true;
+              continue;
+           }
          }
          if(innerTuple == null){
+           LOG.info(" FIRST TIME INITIALIZATION STAGE INNERRTUPLE \n");
            innerTuple = rightChild.next();
            if(innerTuple != null)
               LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
-           else
+           else {
               LOG.info("********rightChild.next() = NULL\n");
+              end = true;
+              continue;
+           }
           
          }
+
+        // --------------------- reset tuple slots for a new round ----------------------// 
 
         outerTupleSlots.clear();
         innerTupleSlots.clear();
         posInnerTupleSlots = -1;
         posOuterTupleSlots = -1;
         
+        //------------------------ advance alternatively on each side until a match is found ----
 
         int cmp;
-        while ((cmp = joincomparator.compare(outerTuple, innerTuple)) != 0) {
+        LOG.info(" COMPARATION & ADVANCE STAGE \n"); 
+        while ((end != true) && ((cmp = joincomparator.compare(outerTuple, innerTuple)) != 0)) { 
           
           if (cmp > 0) {
                         
@@ -234,11 +251,9 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
             innerTuple = rightChild.next();
             if(innerTuple != null)
                LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
-            else
+            else {
                 LOG.info("********rightChild.next() = NULL\n");
-
-            if (innerTuple == null){
-               end = true;
+                end = true; 
             }
 
             return outTuple;  
@@ -259,10 +274,8 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
                outerTuple = leftChild.next();
                if( outerTuple != null)
                   LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
-               else
+               else {
                   LOG.info("********leftChild.next() = null \n");
-
-               if (outerTuple == null){
                   end = true;
                }
 
@@ -270,42 +283,34 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
 
            }//cmp<0
           
-          
-          if (innerTuple == null) {
-              end = true;
-             //in original algorithm we had return null , but now we need to continue the end processing phase for remaining unprocessed right tuples
-              break;
-          }
-
-          if (outerTuple == null) {             
-             end = true;
-             //in original algorithm we had return null , but now we need to continue the end processing phase for remaining unprocessed right tuples
-             break;
-          }
         
 
       }//while
 
+     // -------------- once a match is found, retain all tuples with this key in tuple slots on each side -----//
+ 
     
 
      if(end == false) {
+           LOG.info(" SLOTS POPULATION STAGE \n"); 
            endInPopulationStage = false;
+
+           boolean endOuter = false;
+           boolean endInner = false; 
+
            previous = new VTuple(outerTuple);
            do {
              outerTupleSlots.add(new VTuple(outerTuple));
              outerTuple = leftChild.next();
              if( outerTuple != null)
                 LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
-             else
+             else {
                 LOG.info("********leftChild.next() = null \n");
-
-             if (outerTuple == null) {
-               end = true;
-               endInPopulationStage = true;
-               break;
+                endOuter = true;
              }
+
              
-           } while (tupleComparator[0].compare(previous, outerTuple) == 0);
+           } while ((endOuter != true) && (tupleComparator[0].compare(previous, outerTuple) == 0));
            posOuterTupleSlots = 0;
            
 
@@ -315,51 +320,71 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
              innerTuple = rightChild.next();
              if(innerTuple != null)
                LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
-             else
+             else {
                 LOG.info("********rightChild.next() = NULL\n");
-
-             
-             if (innerTuple == null) {
-               end = true;
-               endInPopulationStage = true;
-               break;
+                endInner = true;    
              }
+
                           
-           } while (tupleComparator[1].compare(previous, innerTuple) == 0);
+           } while ((endInner != true) && (tupleComparator[1].compare(previous, innerTuple) == 0) ); 
            posInnerTupleSlots = 0;
            LOG.info("_________finished populating tuple slots lists in one round ___________");
+
+           if ((endOuter == true) || (endInner == true)) {
+              end = true; 
+              endInPopulationStage = true;
+           }
+
          } // if end false
        }//if newround
        
          
-       if((end == false) && (endInPopulationStage == false)){
-         outerNext = new VTuple (outerTupleSlots.get(posOuterTupleSlots));  
-         
-         if((posInnerTupleSlots == innerTupleSlots.size())&&(posOuterTupleSlots != (outerTupleSlots.size()-1))){
-           posOuterTupleSlots = posOuterTupleSlots + 1;
-           outerNext = new VTuple(outerTupleSlots.get(posOuterTupleSlots)); 
-           posInnerTupleSlots = 0;
+       // ------------------------- now output result matching tuples from the slots -------------//
+
+       //if either we haven't reached end on neither side, or we did reach end on one(or both) sides but that happened in the slots population step (i.e. refers to next round
+       if((end == false) || ((end == true) && (endInPopulationStage == true))){ 
+          LOG.info(" RESULTS STAGE \n");
+
+         if(posOuterTupleSlots == 0){
+           outerNext = new VTuple (outerTupleSlots.get(posOuterTupleSlots));  
+           posOuterTupleSlots = posOuterTupleSlots + 1; 
+         }
+        
+
+         if(posInnerTupleSlots <= (innerTupleSlots.size() -1)) {
            
+           Tuple aTuple = new VTuple(innerTupleSlots.get(posInnerTupleSlots));
+           posInnerTupleSlots = posInnerTupleSlots + 1;
+
+           frameTuple.set(outerNext, aTuple);
+           joinQual.eval(qualCtx, inSchema, frameTuple);
+           projector.eval(evalContexts, frameTuple);
+           projector.terminate(evalContexts, outTuple);
+           LOG.info("============ result :" + outTuple.toString() + "\n");
+           return outTuple;
+
          }
-         
+         else {
+           // right (inner) slots reached end and should be rewind if there are still tuples in the outer slots
 
-         if((posInnerTupleSlots == innerTupleSlots.size())&&(posOuterTupleSlots == (outerTupleSlots.size()-1))){
-           // a new round with new tuples is needed
-           posOuterTupleSlots = posOuterTupleSlots + 1;
-           continue;
+           if(posOuterTupleSlots <= (outerTupleSlots.size()-1)) {
+              //rewind the right slots position
+              posInnerTupleSlots = 0;
+              Tuple aTuple = new VTuple(innerTupleSlots.get(posInnerTupleSlots));
+              posInnerTupleSlots = posInnerTupleSlots + 1;
+              outerNext = new VTuple (outerTupleSlots.get(posOuterTupleSlots));  
+              posOuterTupleSlots = posOuterTupleSlots + 1;
+
+              frameTuple.set(outerNext, aTuple);
+              joinQual.eval(qualCtx, inSchema, frameTuple);
+              projector.eval(evalContexts, frameTuple);
+              projector.terminate(evalContexts, outTuple);
+              LOG.info("============ result :" + outTuple.toString() + "\n");
+              return outTuple;
+
+           }
+
          }
-
-
-         Tuple aTuple = new VTuple(innerTupleSlots.get(posInnerTupleSlots));
-         posInnerTupleSlots = posInnerTupleSlots + 1;
-         
-
-         frameTuple.set(outerNext, aTuple);
-         joinQual.eval(qualCtx, inSchema, frameTuple);
-         projector.eval(evalContexts, frameTuple);
-         projector.terminate(evalContexts, outTuple);
-         LOG.info("============ result :" + outTuple.toString() + "\n");
-         return outTuple;
         
        }//the second if end false
 
