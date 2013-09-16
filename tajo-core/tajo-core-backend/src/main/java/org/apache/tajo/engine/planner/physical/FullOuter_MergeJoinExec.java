@@ -216,10 +216,13 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
          if(outerTuple == null){
            LOG.info(" FIRST TIME INITIALIZATION STAGE OUTERTUPLE \n");
            outerTuple = leftChild.next();
-           if( outerTuple != null)
+           if( outerTuple != null){
               LOG.info("********leftChild.next() =" + outerTuple.toString() + "\n");
+              initLeftDone = true;
+           }
            else {
               LOG.info("********leftChild.next() = null \n");
+              initLeftDone = true;
               end = true;
               continue;
            }
@@ -227,10 +230,13 @@ public class FullOuter_MergeJoinExec extends BinaryPhysicalExec {
          if(innerTuple == null){
            LOG.info(" FIRST TIME INITIALIZATION STAGE INNERRTUPLE \n");
            innerTuple = rightChild.next();
-           if(innerTuple != null)
+           if(innerTuple != null){
               LOG.info("********rightChild.next() =" + innerTuple.toString() + "\n");
+              initRightDone = true;
+           }
            else {
               LOG.info("********rightChild.next() = NULL\n");
+              initRightDone = true;
               end = true;
               continue;
            }
